@@ -1,0 +1,9 @@
+{
+  "name": "personal_meeting_app",
+  "private": true,
+  "description": "Static web messenger (GitHub Pages). No runtime dependencies; tests use node:test.",
+  "type": "module",
+  "scripts": {
+    "test": "node test/archive-format.test.mjs"
+  }
+}
