@@ -3,6 +3,8 @@ import { requestPersistence, saveMessage, loadMessages, deleteMessage, clearMess
 import { summarizeUsage, formatBytes } from './core/storage-usage.js';
 import { loadStickers, stickerUrl, importStickerFile, exportStickerYaml } from './stickers.js';
 import { initSocial } from './social.js';
+import { initCallUi } from './call-ui.js';
+import { initRecordingLibrary } from './recordings.js';
 import { putMessage } from './supabase-store.js';
 import { initSettings } from './settings.js';
 import {
@@ -380,6 +382,9 @@ const loginForm = document.getElementById('login-form');
 const registerForm = document.getElementById('register-form');
 const btnToggleReg = document.getElementById('btn-toggle-reg');
 let currentCode = '';
+let callUi = null;
+let recLib = null;
+function onLoggedIn() { if (callUi) callUi.connect(currentCode); }
 
 function setAcctStatus() {
   acctSummary.textContent = isLoggedIn() ? `已登入：${currentCode}（歸檔已啟用）` : '未登入（長期歸檔需要登入）';
@@ -404,6 +409,7 @@ loginForm.addEventListener('submit', async (e) => {
     acctMsg.textContent = '登入成功。';
     setAcctStatus();
     flushPending();
+    onLoggedIn();
   } else {
     acctMsg.textContent = (r.data && r.data.error) || `登入失敗（${r.status}）`;
   }
@@ -424,6 +430,7 @@ registerForm.addEventListener('submit', async (e) => {
     acctMsg.textContent = '註冊並登入成功。';
     setAcctStatus();
     flushPending();
+    onLoggedIn();
   } else {
     acctMsg.textContent = '註冊成功，請用新帳號登入。';
   }
@@ -432,6 +439,12 @@ registerForm.addEventListener('submit', async (e) => {
 setAcctStatus();
 initSettings();
 const social = initSocial(() => (isLoggedIn() ? currentCode : ''));
+callUi = initCallUi(() => (isLoggedIn() ? currentCode : ''), () => recLib && recLib.refresh());
+recLib = initRecordingLibrary(document.getElementById('recordings-panel'));
+document.getElementById('btn-call-toggle').addEventListener('click', () => {
+  const p = document.getElementById('call-panel');
+  p.hidden = !p.hidden;
+});
 // 登入狀態改變時刷新分享代號
 loginForm.addEventListener('submit', () => setTimeout(() => social.refresh(), 0));
 registerForm.addEventListener('submit', () => setTimeout(() => social.refresh(), 0));

@@ -60,6 +60,14 @@
           <ul id="group-list"></ul>
           <p id="social-msg" class="acct-msg"></p>
         </div>
+        <div id="recordings-panel" class="storage">
+          <h3>錄音錄影庫（只屬於你，不在對話中）</h3>
+          <p class="acct-msg">預設存在這台裝置的 IndexedDB。支援的瀏覽器可以另外選一個資料夾（File System Access）。</p>
+          <button type="button" id="rec-folder">選擇儲存資料夾</button>
+          <button type="button" id="rec-save-folder" hidden>存到資料夾</button>
+          <ul id="rec-list" class="rec-list"></ul>
+          <p id="rec-msg" class="acct-msg"></p>
+        </div>
         <div class="storage">
           <h3>貼圖庫</h3>
           <label>匯入貼圖（YAML） <input id="sticker-import" type="file" accept=".yaml,.yml,text/yaml,text/plain"></label>
@@ -92,10 +100,33 @@
       <button type="button" id="btn-toggle-reg">沒有帳號？註冊</button>
       <p id="acct-msg" class="acct-msg"></p>
     </details>
+    <section id="call-panel" class="call-panel" hidden>
+      <div class="call-videos">
+        <video id="remote-video" class="remote-video" playsinline autoplay controls></video>
+        <video id="local-video" class="local-video" playsinline autoplay muted></video>
+      </div>
+      <p class="call-line"><span id="call-status" class="acct-msg">未通話</span>
+        <span id="rec-indicator" class="rec-badge" hidden>● REC</span>
+        <span id="peer-rec" class="rec-badge" hidden>對方正在錄製</span></p>
+      <div class="call-controls">
+        <input id="call-peer" placeholder="對方代號" autocomplete="off">
+        <button type="button" id="btn-call">📹 視訊</button>
+        <button type="button" id="btn-accept" hidden>接聽</button>
+        <button type="button" id="btn-decline" hidden>拒絕</button>
+        <button type="button" id="btn-mic" title="麥克風">🎤</button>
+        <button type="button" id="btn-cam" title="鏡頭">📷</button>
+        <button type="button" id="btn-flip" title="切換前後鏡頭" hidden>🔄</button>
+        <button type="button" id="rec-start-audio" hidden>錄音</button>
+        <button type="button" id="rec-start-video" hidden>錄影</button>
+        <button type="button" id="rec-stop" title="停止錄製">⏹</button>
+        <button type="button" id="btn-hangup" hidden>掛斷</button>
+      </div>
+    </section>
     <div id="sticker-picker" class="sticker-picker" hidden></div>
     <form id="composer" class="composer" autocomplete="off">
       <button type="button" id="btn-voice" title="錄製語音">🎤</button>
       <button type="button" id="btn-stickers" title="貼圖">🙂</button>
+      <button type="button" id="btn-call-toggle" title="視訊通話">📹</button>
       <label class="attach" title="傳送檔案">
         📎
         <input type="file" id="file-input" multiple hidden>

@@ -110,6 +110,18 @@ body {
 .storage { margin-top: 10px; display: flex; flex-direction: column; gap: 6px; }
 .storage h3 { margin: 0; font-size: 15px; }
 .storage button { align-self: flex-start; padding: 6px 10px; border-radius: 6px; border: 1px solid var(--border); background: var(--bubble-other); color: var(--fg); cursor: pointer; }
+.call-panel { border: 1px solid var(--border); border-radius: 8px; padding: 8px; margin-top: 8px; }
+.call-videos { display: grid; grid-template-columns: 1fr; gap: 6px; position: relative; }
+.remote-video { width: 100%; max-height: 360px; background: #000; border-radius: 6px; }
+.local-video { width: 120px; position: absolute; right: 6px; bottom: 6px; background: #000; border-radius: 6px; }
+.call-controls { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 6px; }
+.call-controls input { flex: 1 1 140px; padding: 6px 8px; border: 1px solid var(--border); border-radius: 6px; background: var(--bubble-other); color: var(--fg); }
+.call-controls button, .rec-actions button, .storage button { padding: 6px 10px; border-radius: 6px; border: 1px solid var(--border); background: var(--bubble-other); color: var(--fg); cursor: pointer; }
+.rec-badge { margin-left: 8px; color: #d00; font-weight: bold; font-size: 13px; }
+.rec-list { list-style: none; padding: 0; }
+.rec-item { border-bottom: 1px solid var(--border); padding: 8px 0; }
+.rec-item audio, .rec-item video { width: 100%; margin-top: 4px; }
+.rec-actions { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 4px; }
 .account { margin: 8px 0; font-size: 14px; }
 .account form { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 6px; }
 .account input { padding: 6px 8px; border: 1px solid var(--border); border-radius: 6px; background: var(--bubble-other); color: var(--fg); min-width: 0; flex: 1 1 140px; }

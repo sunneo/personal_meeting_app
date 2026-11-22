@@ -15,6 +15,11 @@ export function isLoggedIn(nowSec = Math.floor(Date.now() / 1000)) {
   return Boolean(token) && tokenExp > nowSec + 30;
 }
 
+/** 目前的登入 token（沒登入或已過期回傳 null）。給通話信令與 TURN 使用。 */
+export function getToken() {
+  return isLoggedIn() ? token : null;
+}
+
 export function logout() {
   token = null;
   tokenExp = 0;
