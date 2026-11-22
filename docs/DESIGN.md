@@ -136,6 +136,52 @@ YYYY-MM/
 ## 11. 使用者需要自己做的部署步驟（只列出，不執行）
 
 1. Supabase：在 SQL 編輯器執行 `supabase/pma.sql`（建立後提供）。
-2. Cloudflare：建立 `archive-worker`，設定 secrets `GH_TOKEN`、`ARCHIVE_KEY`；把 Worker 網址提供給前端設定。
+2. Cloudflare：建立 `archive-worker`，設定 secrets `GH_TOKEN`、`SESSION_SECRET`、`INVITE_CODE`，新增 KV binding `KV`；舊的 `ARCHIVE_KEY` 可刪除（見 `docs/DESIGN.auth.md` 第 5 節）。
 3. GitHub：建立分支 `archive`（或告訴我名稱）；建立 fine-grained token。
 4. GitHub Pages：啟用 `main` 分支的 Pages（若尚未啟用）。
+
+## 12. 貼圖 YAML 格式（已實作：`js/core/sticker-yaml.js`）
+
+受限的 YAML 子集，只用來描述貼圖庫：
+
+```yaml
+# 貼圖庫
+stickers:
+  - name: smile
+    type: svg
+    data: |
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 10 10"><circle cx="5" cy="5" r="4"/></svg>
+  - name: wave
+    type: gif
+    data: "data:image/gif;base64,R0lGOD..."
+```
+
+- 頂層只有 `stickers:`；每個項目以 `  - name:` 開頭，欄位縮排 4 格。
+- `data` 可用 `|` 區塊、雙引號 JSON 字串，或未加引號的單行。
+- `name`：小寫英數、底線、連字號，1–40 字，不可重複。
+- `type` 只能是 `svg` 或 `gif`。
+- svg：必須以 `<svg` 開頭，不可含 `<script`、`<foreignObject`、`on…=` 事件屬性、`javascript:`；顯示時只用 `<img>`。
+- gif：必須是 `data:image/gif;base64,…`。
+- 錯誤會回報行號。匯出的檔案一律用雙引號字串，可以直接再匯入。
+
+## 13. Phase 2 功能狀態（2026-11-22）
+
+| 項目 | 狀態 | 位置 |
+|---|---|---|
+| A 認證（帳號代號＋密碼，短效 HMAC token，密碼在 Worker） | 已實作＋單元測試；Worker 路由已寫，**尚未在 Cloudflare 部署驗證** | `cloudflare/archive-worker/auth.js`、`worker.js`、`docs/DESIGN.auth.md` |
+| B 前端接上歸檔（登入、JSONL、附件 20MB 分片、待補傳） | 已實作；**尚未在瀏覽器實測** | `js/archive-client.js`、`js/app.js` |
+| C1 註冊／登入（含密碼確認） | 已實作 | `index.html` 帳號區塊 |
+| C2 偏好（字體大小、字體、寬度）與頭像 | 已實作（本機） | `js/core/prefs.js`、`js/settings.js` |
+| C3 通知（網頁通知、音效、自訂音效 ≤1MB） | 已實作（本機）；**手機推播（Web Push）未實作**；尚無「收到他人訊息」的接收路徑，目前只有測試按鈕會觸發 | `js/core/notify.js`、`js/notify.js` |
+| C4 儲存空間管理（用量估計、刪除本機訊息、清除本機） | 已實作；刪除只影響本機，不刪歸檔 | `js/core/storage-usage.js`、`js/store.js` |
+| C5 好友清單 | 已實作（本機）；跨裝置同步未實作 | `js/core/social.js`、`js/social.js` |
+| C6 貼圖庫（YAML，svg＋gif） | 已實作（本機，匯入／匯出，選擇器） | 第 12 節 |
+| C7 聊天影片不自動播放、點擊播放、可全螢幕 | 已實作（`preload=none`，`controls` 內含全螢幕） | `js/app.js` `attachmentNode` |
+| C8 建立群組（群主加人，上限 50） | 已實作（本機）；群組訊息的收發與同步未實作 | `js/core/social.js` |
+| C9 分享代號（PMA1 格式＋校驗） | 已實作；**QR Code 未實作**（沒有經過驗證的離線函式庫，不硬塞） | `js/core/social.js` |
+| D 純邏輯測試 | `npm test`（共 9 組） | `test/` |
+
+已知限制（需要後續階段）：
+- 好友、群組、偏好、貼圖目前只存在每台裝置的 localStorage／IndexedDB，**不會跨裝置同步**。要同步需要在 Worker 加一組以登入 token 保護的 KV 路由。
+- 「收到他人訊息」的接收路徑（Supabase 讀取或 Worker 讀取）尚未實作，因此通知只能由測試按鈕觸發。
+- 所有瀏覽器行為（錄音、通知、視訊全螢幕、IndexedDB 配額）尚未在真瀏覽器實測。
