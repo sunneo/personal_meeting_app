@@ -1,4 +1,5 @@
-// 入口：本地模式的骨架。之後的功能（朗讀、檔案、語音、儲存）依 docs/HANDOFF.md 的 todo 逐步加入。
+// 入口：本地模式。之後的功能（傳輸、長期儲存）依 docs/HANDOFF.md 的 todo 逐步加入。
+import { requestPersistence, saveMessage, loadMessages } from './store.js';
 
 const conv = document.getElementById('conversation');
 const form = document.getElementById('composer');
@@ -6,6 +7,13 @@ const input = document.getElementById('text-input');
 
 /** @type {{id:string, ts:number, me:boolean, body:string}[]} */
 const messages = [];
+
+/** 新增一則訊息：先放進記憶體顯示，再寫入 IndexedDB。 */
+function pushMessage(msg) {
+  messages.push(msg);
+  saveMessage(msg);
+  render();
+}
 
 /** 依副檔名／MIME 分類：audio（聲音/音樂）、pdf、other（文件）。 */
 function categoryOf(file) {
@@ -90,9 +98,8 @@ form.addEventListener('submit', (e) => {
   e.preventDefault();
   const body = input.value.trim();
   if (!body) return;
-  messages.push({ id: crypto.randomUUID(), ts: Date.now(), me: true, body });
+  pushMessage({ id: crypto.randomUUID(), ts: Date.now(), me: true, body });
   input.value = '';
-  render();
 });
 
 // ---- 語音訊息：MediaRecorder 錄音，Web Speech API 即時產生字幕（不支援時可手動輸入）。
@@ -152,7 +159,7 @@ btnVoice.addEventListener('click', async () => {
     recorder = null;
     voicePanel.hidden = true;
     if (cancelled) return;
-    messages.push({
+    pushMessage({
       id: crypto.randomUUID(),
       ts: Date.now(),
       me: true,
@@ -160,7 +167,6 @@ btnVoice.addEventListener('click', async () => {
       subtitle: recSubtitle || '（未產生字幕）',
       attachments: [{ name: 'voice.webm', blob, category: 'voice' }],
     });
-    render();
   };
   recorder.start();
   recognizer = startRecognizer();
@@ -184,14 +190,15 @@ fileInput.addEventListener('change', () => {
   const files = [...fileInput.files];
   fileInput.value = '';
   if (files.length === 0) return;
-  messages.push({
+  pushMessage({
     id: crypto.randomUUID(),
     ts: Date.now(),
     me: true,
     body: files.map((f) => f.name).join('、'),
     attachments: files.map((f) => ({ name: f.name, blob: f, category: categoryOf(f) })),
   });
-  render();
 });
 
+requestPersistence();
+messages.push(...(await loadMessages()));
 render();
