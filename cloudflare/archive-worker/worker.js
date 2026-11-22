@@ -11,6 +11,7 @@ import {
   normalizeCode, validCode, validPassword, hashPassword, verifyPassword, signToken, verifyToken,
   loginGate, afterFailure, afterSuccess, constantTimeEqual, TOKEN_TTL_SEC,
 } from './auth.js';
+import { buildIceServers, fetchTurnCredentials, mailboxPush, mailboxDrain } from './rtc.js';
 
 const MAX_PART_BYTES = 20 * 1024 * 1024;
 const TZ_OFFSET_MS = 8 * 60 * 60 * 1000; // 月份以 UTC+8 切分（見 docs/DESIGN.md）
@@ -210,6 +211,31 @@ async function handleManifest(env, url) {
   return json(cur ? JSON.parse(b64ToUtf8(cur.b64)) : { month, attachments: [] });
 }
 
+// ---- WebRTC：ICE 設定（含 TURN 短效憑證）與 KV 信箱（信令備援）
+async function handleTurnConfig(env) {
+  const raw = await fetchTurnCredentials(env);
+  return json(buildIceServers(raw));
+}
+
+async function handleSignal(env, req, code) {
+  const msg = await req.json();
+  if (!msg || msg.from !== code) return json({ error: '信令的 from 必須是登入的代號' }, 400);
+  if (!validCode(msg.to) || msg.to === code) return json({ error: '收件人不合法' }, 400);
+  if (typeof msg.type !== 'string' || msg.type.length > 20) return json({ error: '信令類型不對' }, 400);
+  const key = `inbox:${msg.to}`;
+  const list = (await env.KV.get(key, 'json')) || [];
+  await env.KV.put(key, JSON.stringify(mailboxPush(list, msg, Date.now())), { expirationTtl: 120 });
+  return json({ ok: true });
+}
+
+async function handlePoll(env, code) {
+  const key = `inbox:${code}`;
+  const list = (await env.KV.get(key, 'json')) || [];
+  const out = mailboxDrain(list, Date.now());
+  if (list.length) await env.KV.delete(key);
+  return json({ messages: out.messages });
+}
+
 export default {
   async fetch(req, env) {
     const url = new URL(req.url);
@@ -224,6 +250,9 @@ export default {
 
       const code = await authedCode(env, req);
       if (!code) return json({ error: '未登入或登入已過期' }, 401);
+      if (req.method === 'POST' && url.pathname === '/turn-config') return await handleTurnConfig(env);
+      if (req.method === 'POST' && url.pathname === '/signal') return await handleSignal(env, req, code);
+      if (req.method === 'POST' && url.pathname === '/signal/poll') return await handlePoll(env, code);
       if (req.method === 'POST' && url.pathname === '/append') return await handleAppend(env, req, code);
       if (req.method === 'POST' && url.pathname === '/attachment') return await handleAttachment(env, req);
       if (req.method === 'GET' && url.pathname === '/manifest') return await handleManifest(env, url);
