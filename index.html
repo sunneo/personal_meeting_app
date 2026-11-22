@@ -1,0 +1,39 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>個人通訊</title>
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+  <header class="topbar">
+    <h1>個人通訊</h1>
+    <span id="status" class="status">離線（本地模式）</span>
+  </header>
+
+  <main class="layout">
+    <section id="conversation" class="conversation" aria-live="polite">
+      <p class="empty">尚無訊息。</p>
+    </section>
+
+    <form id="composer" class="composer" autocomplete="off">
+      <button type="button" id="btn-voice" title="錄製語音">🎤</button>
+      <label class="attach" title="傳送檔案">
+        📎
+        <input type="file" id="file-input" multiple hidden>
+      </label>
+      <input type="text" id="text-input" placeholder="輸入訊息…" aria-label="訊息">
+      <button type="submit">送出</button>
+    </form>
+    <div id="voice-panel" class="voice-panel" hidden>
+      <span id="voice-state">錄音中…</span>
+      <p id="voice-subtitle" class="voice-subtitle"></p>
+      <button type="button" id="btn-voice-stop">停止並送出</button>
+      <button type="button" id="btn-voice-cancel">取消</button>
+    </div>
+  </main>
+
+  <script type="module" src="js/app.js"></script>
+</body>
+</html>
