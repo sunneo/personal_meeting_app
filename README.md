@@ -48,7 +48,7 @@ npm test
 2. **備援專案**：`js/config.js` 的 `SUPABASE_PROJECTS` 目前列了四個專案（主要、備援、備援2、備援3，與 desktop-app 的 fa-worker 相同）。**每一個專案都必須在 SQL Editor 執行一次 `supabase/pma.sql`**，否則該專案回 404，程式會換下一個並在狀態列提示。各專案的資料互相獨立；長期歸檔以 Cloudflare 歸檔為準。publishable 金鑰設計上可公開。
    - 備援順序：先試記住的專案（localStorage）；超時 8 秒、網路錯誤、5xx 或 404 就換下一個；每 10 分鐘回頭試主要。
    - 全部失敗時訊息仍留在 IndexedDB，並標示「⏳待補傳」，啟動時、每分鐘與網路恢復時會自動補傳。
-3. **Cloudflare 長期路徑 B**：依 `cloudflare/archive-worker/README.md` 部署 Worker（`worker.js` + `auth.js`）。需要：KV binding `KV`；secrets `GH_TOKEN`、`SESSION_SECRET`（≥32 字元）、`INVITE_CODE`；變數 `ARCHIVE_REPO`、`ARCHIVE_BRANCH`。舊的 `ARCHIVE_KEY` 可以刪除。
+3. **Cloudflare 長期路徑 B**：依 `cloudflare/archive-worker/README.md` 部署 Worker（建議用單檔 `cloudflare/archive-worker/worker.bundle.js`）。需要：KV binding `KV`；secrets `GH_TOKEN`、`SESSION_SECRET`（≥32 字元）；選填 secret `TURNSTILE_SECRET`；變數 `ARCHIVE_REPO`、`ARCHIVE_BRANCH`、`REGISTRATION_MODE`（預設 `open`）。舊的 `ARCHIVE_KEY`、`INVITE_CODE`（僅 `invite` 模式需要）可以刪除或保留。
 4. **GitHub Pages**：repo 設定中啟用 `main` 分支的 Pages。
 
 目前還沒做的（詳見 `docs/DESIGN.md` 第 13 節）：
@@ -59,6 +59,7 @@ npm test
 
 ## 安全
 
-- repo 內不放任何 token、私鑰、密碼或邀請碼。`GH_TOKEN`、`SESSION_SECRET`、`INVITE_CODE` 只存在 Cloudflare Worker 的 secrets。
+- repo 內不放任何 token、私鑰或密碼。`GH_TOKEN`、`SESSION_SECRET`、`TURNSTILE_SECRET`（與 `INVITE_CODE`）只存在 Cloudflare Worker 的 secrets。
+- 開放註冊有防濫用（IP 頻率、可選 Turnstile、帳號配額、保留字），詳見 `docs/DESIGN.auth.md` 第 7 節；要暫停註冊把 `REGISTRATION_MODE` 設成 `closed`。
 - 前端只拿到 2 小時有效的登入 token，存在記憶體中（見 `docs/DESIGN.auth.md`）。
 - `GH_TOKEN` 只存在 Cloudflare Worker 的 secrets，權限限定在私有 repo 的 Contents 讀寫。

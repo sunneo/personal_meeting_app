@@ -136,7 +136,7 @@ YYYY-MM/
 ## 11. 使用者需要自己做的部署步驟（只列出，不執行）
 
 1. Supabase：在 SQL 編輯器執行 `supabase/pma.sql`（建立後提供）。
-2. Cloudflare：建立 `archive-worker`，設定 secrets `GH_TOKEN`、`SESSION_SECRET`、`INVITE_CODE`，新增 KV binding `KV`；舊的 `ARCHIVE_KEY` 可刪除（見 `docs/DESIGN.auth.md` 第 5 節）。
+2. Cloudflare：建立 `archive-worker`，設定 secrets `GH_TOKEN`、`SESSION_SECRET`（選填 `TURNSTILE_SECRET`），變數 `REGISTRATION_MODE`（預設 `open`），新增 KV binding `KV`；舊的 `ARCHIVE_KEY` 可刪除（開放註冊防線見 `docs/DESIGN.auth.md` 第 7 節）
 3. GitHub：建立分支 `archive`（或告訴我名稱）；建立 fine-grained token。
 4. GitHub Pages：啟用 `main` 分支的 Pages（若尚未啟用）。
 
