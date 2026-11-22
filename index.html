@@ -7,14 +7,53 @@
   <link rel="stylesheet" href="css/style.css">
 </head>
 <body>
+  <!-- 未登入：整個畫面只顯示這張登入／註冊卡片 -->
+  <section id="auth-gate" class="gate" hidden>
+    <div class="gate-card">
+      <h1 class="gate-title">個人通訊</h1>
+      <div class="gate-tabs" role="tablist">
+        <button type="button" id="tab-login" role="tab" aria-selected="true">登入</button>
+        <button type="button" id="tab-register" role="tab" aria-selected="false">註冊</button>
+      </div>
+      <form id="login-form" class="gate-form" autocomplete="off">
+        <label>帳號代號
+          <input name="code" required pattern="[A-Za-z0-9_-]{3,32}" autocomplete="off" autocapitalize="none" spellcheck="false">
+        </label>
+        <label>密碼
+          <input name="password" type="password" required autocomplete="new-password">
+        </label>
+        <button type="submit" class="gate-submit">登入</button>
+      </form>
+      <form id="register-form" class="gate-form" autocomplete="off" hidden>
+        <label>帳號代號（3–32 字元）
+          <input name="code" required pattern="[A-Za-z0-9_-]{3,32}" autocomplete="off" autocapitalize="none" spellcheck="false">
+        </label>
+        <label>密碼（至少 8 字元）
+          <input name="password" type="password" required minlength="8" autocomplete="new-password">
+        </label>
+        <label>確認密碼
+          <input name="password2" type="password" required minlength="8" autocomplete="new-password">
+        </label>
+        <label>邀請碼
+          <input name="invite" required autocomplete="off">
+        </label>
+        <button type="submit" class="gate-submit">註冊</button>
+      </form>
+      <p id="gate-msg" class="gate-msg" role="alert"></p>
+      <button type="button" id="btn-offline" class="gate-link">先用離線本地模式</button>
+    </div>
+  </section>
+
   <header class="topbar">
     <h1>個人通訊</h1>
-    <span id="status" class="status">離線（本地模式）</span>
+    <span id="acct-status" class="status"></span>
+    <span id="status" class="status"></span>
     <img id="avatar" class="avatar" alt="" hidden>
     <button type="button" id="btn-settings" class="settings-btn">設定</button>
+    <button type="button" id="btn-logout" class="settings-btn" hidden>登出</button>
   </header>
 
-  <main class="layout">
+  <main id="app-main" class="layout" hidden>
     <section id="conversation" class="conversation" aria-live="polite">
       <p class="empty">尚無訊息。</p>
     </section>
@@ -89,23 +128,6 @@
           <p class="acct-msg">只刪除這台裝置上的資料；已歸檔到 Cloudflare / Supabase 的內容不會被刪除。</p>
         </div>
       </form>
-    </details>
-    <details id="account" class="account">
-      <summary id="acct-summary">未登入（長期歸檔需要登入）</summary>
-      <form id="login-form" autocomplete="off">
-        <input name="code" placeholder="帳號代號" required pattern="[A-Za-z0-9_-]{3,32}" autocomplete="off" autocapitalize="none" spellcheck="false">
-        <input name="password" type="password" placeholder="密碼" required autocomplete="new-password">
-        <button type="submit">登入</button>
-      </form>
-      <form id="register-form" autocomplete="on" hidden>
-        <input name="code" placeholder="帳號代號（3–32 字元）" required pattern="[A-Za-z0-9_-]{3,32}" autocomplete="username">
-        <input name="password" type="password" placeholder="密碼（至少 8 字元）" required minlength="8" autocomplete="new-password">
-        <input name="password2" type="password" placeholder="再輸入一次密碼" required minlength="8" autocomplete="new-password">
-        <input name="invite" placeholder="邀請碼" required autocomplete="off">
-        <button type="submit">註冊</button>
-      </form>
-      <button type="button" id="btn-toggle-reg">沒有帳號？註冊</button>
-      <p id="acct-msg" class="acct-msg"></p>
     </details>
     <section id="call-panel" class="call-panel" hidden>
       <div class="call-videos">

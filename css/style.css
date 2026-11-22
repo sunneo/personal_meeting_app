@@ -167,3 +167,70 @@ body {
   .layout { padding: 0 16px 16px; }
   .bubble { max-width: 90%; }
 }
+
+/* ---- 未登入：獨立的登入／註冊卡片（手機寬度友善） */
+[hidden] { display: none !important; }
+.gate {
+  flex: 1;
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+  box-sizing: border-box;
+}
+.gate-card {
+  width: 100%;
+  max-width: 380px;
+  background: var(--bubble-other);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 20px;
+  box-sizing: border-box;
+}
+.gate-title { margin: 0 0 12px; font-size: 22px; text-align: center; }
+.gate-tabs { display: flex; gap: 8px; margin-bottom: 12px; }
+.gate-tabs button {
+  flex: 1;
+  padding: 8px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: transparent;
+  color: var(--fg);
+  cursor: pointer;
+  font-size: 15px;
+}
+.gate-tabs button[aria-selected="true"] { background: var(--accent); color: #fff; border-color: var(--accent); }
+.gate-form { display: flex; flex-direction: column; gap: 10px; }
+.gate-form label { display: flex; flex-direction: column; gap: 4px; font-size: 14px; }
+.gate-form input {
+  width: 100%;
+  padding: 10px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--bg);
+  color: var(--fg);
+  font-size: 16px; /* 避免手機瀏覽器自動放大 */
+  box-sizing: border-box;
+}
+.gate-submit {
+  padding: 10px;
+  border: none;
+  border-radius: 8px;
+  background: var(--accent);
+  color: #fff;
+  font-size: 16px;
+  cursor: pointer;
+}
+.gate-msg { min-height: 1.4em; color: #c62828; font-size: 14px; margin: 10px 0 0; }
+.gate-link {
+  margin-top: 6px;
+  width: 100%;
+  background: none;
+  border: none;
+  color: var(--accent);
+  text-decoration: underline;
+  cursor: pointer;
+  font-size: 14px;
+  padding: 6px;
+}
