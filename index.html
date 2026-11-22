@@ -10,6 +10,8 @@
   <header class="topbar">
     <h1>個人通訊</h1>
     <span id="status" class="status">離線（本地模式）</span>
+    <img id="avatar" class="avatar" alt="" hidden>
+    <button type="button" id="btn-settings" class="settings-btn">設定</button>
   </header>
 
   <main class="layout">
@@ -17,6 +19,21 @@
       <p class="empty">尚無訊息。</p>
     </section>
 
+    <details id="settings" class="account" hidden>
+      <summary>設定（偏好與頭像，僅存在此瀏覽器）</summary>
+      <form id="prefs-form" class="prefs-form">
+        <label>字體大小 <input name="fontSize" type="number" min="12" max="24" step="1"></label>
+        <label>字體
+          <select name="fontFamily">
+            <option value="system">系統字體</option>
+            <option value="serif">襯線</option>
+            <option value="mono">等寬</option>
+          </select>
+        </label>
+        <label>版面寬度（px） <input name="width" type="number" min="480" max="1200" step="10"></label>
+        <label>頭像 <input name="avatar" type="file" accept="image/*"></label>
+      </form>
+    </details>
     <details id="account" class="account">
       <summary id="acct-summary">未登入（長期歸檔需要登入）</summary>
       <form id="login-form" autocomplete="on">

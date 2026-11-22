@@ -1,6 +1,7 @@
 // 入口：本地模式。之後的功能（傳輸、長期儲存）依 docs/HANDOFF.md 的 todo 逐步加入。
 import { requestPersistence, saveMessage, loadMessages } from './store.js';
 import { putMessage } from './supabase-store.js';
+import { initSettings } from './settings.js';
 import {
   archiveConfigured, isLoggedIn, login, register, logout, archiveAppend, archiveAttachment,
 } from './archive-client.js';
@@ -325,6 +326,7 @@ registerForm.addEventListener('submit', async (e) => {
 });
 
 setAcctStatus();
+initSettings();
 requestPersistence();
 messages.push(...(await loadMessages()));
 render();
