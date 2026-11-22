@@ -8,6 +8,7 @@ Continue from the handoff document at D:\Downloads\personal_meeting_app\docs\HAN
 - Reference/shared infra: D:\Downloads\videos-嗨投資-desktop-app\desktop-app (huge; do NOT scan it wholesale). Cloudflare worker example: desktop-app\cloudflare\fa-worker\README.md. Supabase/cloudflare usage mentioned in DESIGN.remote-group.md, DESIGN.release.md, DESIGN.sandbox-worker.md, features\FEATURES.md. Goal: reuse the SAME Cloudflare + Supabase projects as the desktop-app (read its config/env names; never commit secrets).
 - Goal: a messenger web app (static, GitHub Pages).
 - Done so far (all todo 1–9 committed on main; NOT pushed, NOT deployed): DESIGN.md `690197e`; scaffold `aa8935e`; text+TTS `4fc55c3`; files `d26ed46`; voice+subtitles `ce18306`; IndexedDB+persist `35e348e`; Supabase path A `f3c8e01` + wiring `a7a37a9`; Cloudflare archive-worker path B `f3dab73`; tests+README `ae135a1`.
+- Phase 2 (A→B→C→D) committed, NOT pushed/deployed: auth design `4fcd008`; auth logic `6cd1827`; worker login/register + token gate `aab0418`; archive client `fd90aee`; app login+archive sync `12e12c3`; prefs/avatar `521ce27`; notifications `e4c6b73`; storage mgmt `8b0fce2`; stickers `154f1d0`+`1445cbf`; video `23f80a2`; friends/groups `cf33539`+`adbdc94`; DESIGN §12–13 `69f47cf`; README `45d0bf9`. QR code and cross-device sync NOT done (see DESIGN §13).
 - Not yet verified in a real browser (only syntax-checked and pure-logic tests run). Not yet wired: UI for attachments to path B, Supabase history pull, `js/config.js` values (user to fill).
 
 ## 3. Todo (ordered)
