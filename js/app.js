@@ -20,7 +20,7 @@ function attachmentNode(att) {
   const wrap = document.createElement('div');
   wrap.className = 'attachment';
   const url = URL.createObjectURL(att.blob);
-  if (att.category === 'audio') {
+  if (att.category === 'audio' || att.category === 'voice') {
     const a = document.createElement('audio');
     a.controls = true;
     a.src = url;
@@ -75,6 +75,12 @@ function render() {
     speak.addEventListener('click', () => speakText(m.body));
     b.append(text, speak);
     for (const att of m.attachments || []) b.append(attachmentNode(att));
+    if (m.subtitle !== undefined) {
+      const sub = document.createElement('div');
+      sub.className = 'subtitle';
+      sub.textContent = '字幕：' + m.subtitle;
+      b.append(sub);
+    }
     conv.append(b);
   }
   conv.scrollTop = conv.scrollHeight;
@@ -87,6 +93,90 @@ form.addEventListener('submit', (e) => {
   messages.push({ id: crypto.randomUUID(), ts: Date.now(), me: true, body });
   input.value = '';
   render();
+});
+
+// ---- 語音訊息：MediaRecorder 錄音，Web Speech API 即時產生字幕（不支援時可手動輸入）。
+const btnVoice = document.getElementById('btn-voice');
+const voicePanel = document.getElementById('voice-panel');
+const voiceState = document.getElementById('voice-state');
+const voiceSubtitle = document.getElementById('voice-subtitle');
+const btnVoiceStop = document.getElementById('btn-voice-stop');
+const btnVoiceCancel = document.getElementById('btn-voice-cancel');
+
+let recorder = null;
+let recChunks = [];
+let recognizer = null;
+let recSubtitle = '';
+let recCancelled = false;
+
+function startRecognizer() {
+  const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+  if (!SR) return null;
+  const r = new SR();
+  r.lang = 'zh-TW';
+  r.continuous = true;
+  r.interimResults = true;
+  r.onresult = (ev) => {
+    let text = '';
+    for (let i = 0; i < ev.results.length; i++) text += ev.results[i][0].transcript;
+    recSubtitle = text;
+    voiceSubtitle.textContent = text;
+  };
+  r.onerror = () => { /* 字幕失敗不影響錄音 */ };
+  try { r.start(); } catch (_) { return null; }
+  return r;
+}
+
+btnVoice.addEventListener('click', async () => {
+  if (recorder) return;
+  let stream;
+  try {
+    stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+  } catch (_) {
+    voicePanel.hidden = false;
+    voiceState.textContent = '無法使用麥克風（權限被拒絕或不支援）';
+    voiceSubtitle.textContent = '';
+    btnVoiceStop.hidden = true;
+    return;
+  }
+  recChunks = [];
+  recSubtitle = '';
+  recCancelled = false;
+  recorder = new MediaRecorder(stream);
+  recorder.ondataavailable = (e) => { if (e.data.size) recChunks.push(e.data); };
+  recorder.onstop = () => {
+    stream.getTracks().forEach((t) => t.stop());
+    if (recognizer) { try { recognizer.stop(); } catch (_) {} recognizer = null; }
+    const cancelled = recCancelled;
+    const blob = new Blob(recChunks, { type: recorder.mimeType || 'audio/webm' });
+    recorder = null;
+    voicePanel.hidden = true;
+    if (cancelled) return;
+    messages.push({
+      id: crypto.randomUUID(),
+      ts: Date.now(),
+      me: true,
+      body: '🎤 語音訊息',
+      subtitle: recSubtitle || '（未產生字幕）',
+      attachments: [{ name: 'voice.webm', blob, category: 'voice' }],
+    });
+    render();
+  };
+  recorder.start();
+  recognizer = startRecognizer();
+  voicePanel.hidden = false;
+  voiceState.textContent = '錄音中…';
+  voiceSubtitle.textContent = recognizer ? '' : '（此瀏覽器不支援即時字幕）';
+  btnVoiceStop.hidden = false;
+});
+
+btnVoiceStop.addEventListener('click', () => {
+  if (recorder && recorder.state !== 'inactive') recorder.stop();
+});
+btnVoiceCancel.addEventListener('click', () => {
+  recCancelled = true;
+  if (recorder && recorder.state !== 'inactive') recorder.stop();
+  else voicePanel.hidden = true;
 });
 
 const fileInput = document.getElementById('file-input');
