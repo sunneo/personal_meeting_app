@@ -84,6 +84,11 @@ body {
 .bubble .speak { margin-left: 6px; cursor: pointer; background: none; border: none; font-size: 14px; }
 .bubble .subtitle { font-size: 13px; color: var(--muted); margin-top: 4px; }
 
+.attachment { margin-top: 6px; display: flex; flex-direction: column; gap: 4px; }
+.attachment audio { width: 100%; }
+.attachment .pdf-view { width: 100%; height: 360px; border: 1px solid var(--border); border-radius: 6px; }
+.attachment a { color: var(--accent); word-break: break-all; }
+
 .composer {
   display: flex;
   gap: 8px;
