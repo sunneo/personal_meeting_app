@@ -1,17 +1,25 @@
-// 長期儲存路徑 B：Cloudflare Worker → GitHub 私有 repo 的分支。
+// 長期儲存路徑 B：Cloudflare Worker → GitHub 私有 repo 的分支。認證見 docs/DESIGN.auth.md。
 // 目錄版面（每月一個資料夾）：
 //   YYYY-MM/conversation.jsonl   本月所有訊息，一行一則
-//   YYYY-MM/manifest.json        本月附件清單（名稱、大小、sha256、分類、part 列表）
+//   YYYY-MM/manifest.json        本月附件清單
 //   YYYY-MM/<category>/<name>    附件；超過 20MB 的檔案由前端切成 <name>.partNNN
 //
-// 需要的 secrets（只存在 Cloudflare，不進 repo）：
-//   GH_TOKEN     fine-grained token，只授權私有 repo 的 Contents 讀寫
-//   ARCHIVE_KEY  前端呼叫時要帶的共享密鑰（X-Archive-Key 標頭），擋陌生人寫入
-// 變數（wrangler.toml）：ARCHIVE_REPO、ARCHIVE_BRANCH
+// Secrets（只存在 Cloudflare）：GH_TOKEN、SESSION_SECRET（≥32 字元）、INVITE_CODE（註冊用）
+// Variables：ARCHIVE_REPO、ARCHIVE_BRANCH
+// KV binding：KV（帳號紀錄 acct:<代號>）
+import {
+  normalizeCode, validCode, validPassword, hashPassword, verifyPassword, signToken, verifyToken,
+  loginGate, afterFailure, afterSuccess, constantTimeEqual, TOKEN_TTL_SEC,
+} from './auth.js';
 
 const MAX_PART_BYTES = 20 * 1024 * 1024;
 const TZ_OFFSET_MS = 8 * 60 * 60 * 1000; // 月份以 UTC+8 切分（見 docs/DESIGN.md）
 const CATEGORIES = new Set(['audio', 'music', 'pdf', 'docs', 'voice', 'other']);
+const CORS = {
+  'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
+  'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+};
 
 export function monthOf(ts) {
   const d = new Date(Number(ts) + TZ_OFFSET_MS);
@@ -26,7 +34,7 @@ export function validName(n) {
   return typeof n === 'string' && n.length > 0 && n.length <= 200 && !/[\/\\\0]/.test(n) && n !== '.' && n !== '..';
 }
 
-/** 把一批附件的 part 名稱組出來：不超過 20MB 只有一份，否則 .part001… */
+/** 單一 part 路徑：只有一份不加後綴，否則 .partNNN。 */
 export function partPath(month, category, name, index, total) {
   const base = `${month}/${category}/${name}`;
   return total > 1 ? `${base}.part${String(index).padStart(3, '0')}` : base;
@@ -49,7 +57,7 @@ function b64ToUtf8(b64) {
 function json(obj, status = 200) {
   return new Response(JSON.stringify(obj), {
     status,
-    headers: { 'Content-Type': 'application/json; charset=utf-8', 'Access-Control-Allow-Origin': '*' },
+    headers: { 'Content-Type': 'application/json; charset=utf-8', ...CORS },
   });
 }
 
@@ -67,7 +75,6 @@ function ghHeaders(env) {
   };
 }
 
-/** 讀取檔案：回傳 { text|bytes, sha } 或 null（不存在）。 */
 async function ghGet(env, path) {
   const res = await fetch(`${ghUrl(env, path)}?ref=${encodeURIComponent(env.ARCHIVE_BRANCH)}`, { headers: ghHeaders(env) });
   if (res.status === 404) return null;
@@ -76,7 +83,6 @@ async function ghGet(env, path) {
   return { b64: j.content.replace(/\n/g, ''), sha: j.sha };
 }
 
-/** 寫入檔案（新增或覆寫）。sha 為既有檔案的 sha，新檔案傳 undefined。 */
 async function ghPut(env, path, contentB64, sha, message) {
   const body = { message, content: contentB64, branch: env.ARCHIVE_BRANCH };
   if (sha) body.sha = sha;
@@ -89,7 +95,7 @@ async function ghPut(env, path, contentB64, sha, message) {
   return res.json();
 }
 
-/** 讀-改-寫，遇到 409（sha 衝突）重試幾次。 */
+/** 讀-改-寫，遇到衝突（409）重試幾次。 */
 async function updateFile(env, path, mutate, message) {
   for (let attempt = 0; attempt < 4; attempt++) {
     const cur = await ghGet(env, path);
@@ -103,23 +109,66 @@ async function updateFile(env, path, mutate, message) {
   }
 }
 
-async function readManifest(env, month) {
-  const cur = await ghGet(env, `${month}/manifest.json`);
-  return cur ? JSON.parse(b64ToUtf8(cur.b64)) : { month, attachments: [] };
+// ---- 帳號（KV）
+async function getAcct(env, code) {
+  return env.KV.get(`acct:${code}`, 'json');
 }
 
-// ---- 端點
-async function handleAppend(env, req) {
+async function putAcct(env, code, rec) {
+  await env.KV.put(`acct:${code}`, JSON.stringify(rec));
+}
+
+async function handleRegister(env, req) {
+  if (!env.INVITE_CODE) return json({ error: '尚未設定 INVITE_CODE，註冊已關閉' }, 403);
+  const b = await req.json();
+  const code = normalizeCode(b.code);
+  if (!constantTimeEqual(new TextEncoder().encode(String(b.invite || '')), new TextEncoder().encode(env.INVITE_CODE))) {
+    return json({ error: '邀請碼不對' }, 403);
+  }
+  if (!validCode(code)) return json({ error: '代號格式不對（3–32 字元：小寫英數、底線、連字號）' }, 400);
+  if (!validPassword(b.password)) return json({ error: '密碼至少 8 字元' }, 400);
+  if (await getAcct(env, code)) return json({ error: '這個代號已被使用' }, 409);
+  const pw = await hashPassword(b.password);
+  await putAcct(env, code, { pw, fails: 0, lockedUntil: 0, created: Date.now() });
+  return json({ ok: true, code });
+}
+
+async function handleLogin(env, req) {
+  if (!env.SESSION_SECRET) return json({ error: '尚未設定 SESSION_SECRET' }, 500);
+  const b = await req.json();
+  const code = normalizeCode(b.code);
+  const now = Date.now();
+  const rec = validCode(code) ? await getAcct(env, code) : null;
+  if (!rec) return json({ error: '代號或密碼不對' }, 401);
+  const gate = loginGate(rec, now);
+  if (!gate.allowed) return json({ error: '嘗試次數過多，請稍後再試', retryAfterSec: Math.ceil(gate.retryAfter / 1000) }, 429);
+  const ok = await verifyPassword(String(b.password || ''), rec.pw);
+  if (!ok) {
+    await putAcct(env, code, afterFailure(rec, now));
+    return json({ error: '代號或密碼不對' }, 401);
+  }
+  await putAcct(env, code, afterSuccess(rec));
+  const { token, exp } = await signToken(code, env.SESSION_SECRET, Math.floor(now / 1000), undefined, TOKEN_TTL_SEC);
+  return json({ token, exp, code });
+}
+
+/** 驗證 Authorization: Bearer <token>，回傳代號或 null。 */
+async function authedCode(env, req) {
+  const h = req.headers.get('Authorization') || '';
+  const m = /^Bearer (.+)$/.exec(h);
+  if (!m || !env.SESSION_SECRET) return null;
+  const v = await verifyToken(m[1], env.SESSION_SECRET, Math.floor(Date.now() / 1000));
+  return v ? v.sub : null;
+}
+
+// ---- 歸檔端點（需要 token）
+async function handleAppend(env, req, code) {
   const msg = await req.json();
   if (!msg || typeof msg.id !== 'string' || typeof msg.ts !== 'number') return json({ error: '訊息格式不對' }, 400);
+  msg.from = code; // 發送者以登入的帳號為準，避免冒充
   const month = monthOf(msg.ts);
   const line = JSON.stringify(msg) + '\n';
-  await updateFile(
-    env,
-    `${month}/conversation.jsonl`,
-    (old) => (old ? old : '') + line,
-    `archive: ${month} message ${msg.id}`
-  );
+  await updateFile(env, `${month}/conversation.jsonl`, (old) => (old ? old : '') + line, `archive: ${month} message ${msg.id}`);
   return json({ ok: true, month });
 }
 
@@ -138,7 +187,6 @@ async function handleAttachment(env, req) {
   const cur = await ghGet(env, path);
   await ghPut(env, path, b.data, cur ? cur.sha : undefined, `archive: ${b.month} ${b.category} ${b.name} part ${b.index}/${b.total}`);
 
-  // 最後一份寫入時，更新 manifest（之前的 part 已經寫進去）
   if (b.index === b.total && b.sha256) {
     await updateFile(
       env,
@@ -158,28 +206,25 @@ async function handleAttachment(env, req) {
 async function handleManifest(env, url) {
   const month = url.searchParams.get('month');
   if (!validMonth(month)) return json({ error: '月份格式應為 YYYY-MM' }, 400);
-  return json(await readManifest(env, month));
+  const cur = await ghGet(env, `${month}/manifest.json`);
+  return json(cur ? JSON.parse(b64ToUtf8(cur.b64)) : { month, attachments: [] });
 }
 
 export default {
   async fetch(req, env) {
     const url = new URL(req.url);
-    if (req.method === 'OPTIONS') {
-      return new Response(null, {
-        headers: {
-          'Access-Control-Allow-Origin': '*',
-          'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
-          'Access-Control-Allow-Headers': 'Content-Type, X-Archive-Key',
-        },
-      });
-    }
+    if (req.method === 'OPTIONS') return new Response(null, { headers: CORS });
     if (req.method === 'GET' && url.pathname === '/') return json({ ok: true, service: 'archive-worker' });
-    if (!env.GH_TOKEN || !env.ARCHIVE_KEY || !env.ARCHIVE_REPO || !env.ARCHIVE_BRANCH) {
-      return json({ error: 'Worker 尚未設定 secrets / 變數' }, 500);
+    if (!env.GH_TOKEN || !env.ARCHIVE_REPO || !env.ARCHIVE_BRANCH || !env.KV) {
+      return json({ error: 'Worker 尚未設定 GH_TOKEN / ARCHIVE_REPO / ARCHIVE_BRANCH / KV' }, 500);
     }
-    if (req.headers.get('X-Archive-Key') !== env.ARCHIVE_KEY) return json({ error: '未授權' }, 401);
     try {
-      if (req.method === 'POST' && url.pathname === '/append') return await handleAppend(env, req);
+      if (req.method === 'POST' && url.pathname === '/register') return await handleRegister(env, req);
+      if (req.method === 'POST' && url.pathname === '/login') return await handleLogin(env, req);
+
+      const code = await authedCode(env, req);
+      if (!code) return json({ error: '未登入或登入已過期' }, 401);
+      if (req.method === 'POST' && url.pathname === '/append') return await handleAppend(env, req, code);
       if (req.method === 'POST' && url.pathname === '/attachment') return await handleAttachment(env, req);
       if (req.method === 'GET' && url.pathname === '/manifest') return await handleManifest(env, url);
       return json({ error: '找不到端點' }, 404);
