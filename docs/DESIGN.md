@@ -185,3 +185,72 @@ stickers:
 - 好友、群組、偏好、貼圖目前只存在每台裝置的 localStorage／IndexedDB，**不會跨裝置同步**。要同步需要在 Worker 加一組以登入 token 保護的 KV 路由。
 - 「收到他人訊息」的接收路徑（Supabase 讀取或 Worker 讀取）尚未實作，因此通知只能由測試按鈕觸發。
 - 所有瀏覽器行為（錄音、通知、視訊全螢幕、IndexedDB 配額）尚未在真瀏覽器實測。
+
+## 14. Phase 3 · E：視訊通話（WebRTC，2026-11-22）
+
+### 14.1 架構
+- **信令（signaling）**：主要走 Supabase Realtime（Phoenix 協定，直接用 WebSocket，不依賴套件）。每位使用者監聽頻道 `realtime:pma-inbox-<代號>`，送信時加入對方的收件匣頻道並 broadcast。專案順序沿用 `js/config.js` 的備援清單。
+- **備援信令**：Realtime 全部連不上時，退回 Cloudflare worker 的 KV 信箱（`POST /signal` 送、`POST /signal/poll` 每 3 秒輪詢）。信箱保留 120 秒、最多 50 則。
+- **TURN**：`POST /turn-config`（需登入 token）由 worker 呼叫 Cloudflare Calls 取得短效憑證（TTL 1 小時）。沒有設定 `TURN_KEY_ID` / `TURN_API_TOKEN` 時只回傳 STUN，並標示 `turn:false`，前端會顯示提示。
+- **STUN**：`stun:stun.cloudflare.com:3478`。
+- **媒體**：RTCPeerConnection 1 對 1；鏡頭切換用 `replaceTrack`，不重新協商。
+
+### 14.2 信令格式（`js/core/call-state.js`，有測試）
+`{v:1, callId, from, to, type, payload}`，type ∈ offer / answer / ice / hangup / record-state。
+驗證：版本、代號格式、不可打給自己、SDP 必須以 `v=0` 開頭、ICE 與 SDP 有長度上限。
+
+### 14.3 狀態機
+idle → calling（我打出）／ringing（來電）→ connected → ended → idle。不合法的事件忽略。
+
+### 14.4 鏡頭
+- 手機可切換前後鏡頭（`facingMode: {ideal}`，找不到會退回可用鏡頭）。
+- 只有兩顆以上鏡頭時才顯示切換按鈕（`canFlipCamera`，有測試）。
+
+### 14.5 錄製（`js/recorder.js`、`js/recordings.js`）
+- 可選純音訊或影像。音訊混合本地與遠端音軌（WebAudio）；影像用 canvas 合成（遠端大畫面、本地小畫面）。
+- mimeType 依 `MediaRecorder.isTypeSupported` 依序挑選（有測試）。
+- **錄製中顯示紅色 ● REC；開始與停止時透過信令通知對方**（`record-state`），對方畫面顯示「對方正在錄製」。
+- **結果不進對話**，存進使用者自己的「錄音錄影庫」：預設 IndexedDB（獨立資料庫 `pma-recordings`，可播放（影像點一下才載入）、改名、刪除、下載）。
+- **fap = File System Access API**：可選一個本機資料夾（`showDirectoryPicker`，handle 存 IndexedDB，寫入前重新要求權限）。不支援的瀏覽器（多數手機）隱藏此功能，改用下載。
+
+### 14.6 已知限制（誠實記載）
+- **信令沒有防偽造**：Realtime 頻道目前用公開的 publishable 金鑰即可訂閱，任何人可以偽造 `from` 送出假來電。緩解方式：在 Supabase 啟用 Realtime 私有頻道與 RLS 政策（需使用者在後台設定，未做）；worker 信箱路徑已驗證 `from` 必須等於登入代號。
+- 未在真實瀏覽器（兩台裝置、手機鏡頭、NAT 穿透）實測。
+- 只有 1 對 1；群組通話（mesh）未做。螢幕分享未做。
+- 錄製在瀏覽器記憶體中進行，長時間錄影會佔用大量記憶體。
+
+## 15. Phase 3 · F：備份與每日壓縮
+
+### 15.1 帳號路徑
+歸檔改為 `accounts/<代號>/YYYY-MM/...`（代號來自登入 token，不來自請求，所以使用者無法寫入他人的資料夾）。worker 的 `accountPath()` 有測試。
+
+### 15.2 備份（`js/backup.js`、`js/core/zip.js`）
+- 匯出：zip，內含 `manifest.json`、`messages.jsonl`、`attachments/<訊息 id>/<檔名>`。
+- 還原：讀 zip，依 id 寫入 IndexedDB（同 id 覆蓋，不會重複）。
+- 每日自動上傳：登入後若距上次超過 24 小時，把備份上傳為 `accounts/<代號>/YYYY-MM/docs/backup-YYYYMMDD.zip`（走既有附件路徑，超過 20MB 會切片）。
+- zip 只用 store（不壓縮），由 `zip.test.mjs` 驗證 CRC32 與往返；另已用 .NET `ZipFile` 驗證可被標準工具讀取。
+
+### 15.3 每日壓縮（`cloudflare/archive-worker/squash.js`、`worker.js` 的 `squashArchive`）
+- 觸發：Cron Trigger `0 19 * * *`（UTC，即 UTC+8 凌晨 03:00）。
+- 做法：取得 branch 的 head；列出所有 commit（分頁，最多 2000 筆）；**最舊的 commit（base）永遠不動**；若 base 之後不到 2 筆就跳過。
+- 用 Git Data API 建立新 commit：tree = 目前 head 的 tree，parent = base；確認 head 沒變後，`PATCH ref`（`force: true`）。
+- 鎖：壓縮前在 KV 寫入 `squash-lock`（TTL 15 分鐘）。鎖存在時，`/append` 與 `/attachment` 回 **503**，前端會保留待補傳並稍後重試，因此上傳不會遺失。
+- 紀錄：壓縮後更新根目錄的 `squash-log.json`（保留最近 60 筆）。注意：這是根目錄檔案，不是 manifest（需求原文是「manifest」，這裡為了不與帳號月份 manifest 混淆而另開）。
+
+**誠實說明**：
+- force 更新會**改寫歷史**：舊的 commit 不再被 branch 指向。
+- GitHub 只有在自己的垃圾回收（GC）之後才會釋放舊物件，所以 repo 的大小**不會立即縮小**。
+- 因為壓縮後的 commit tree 就是 head 的 tree，範圍內的內容全部保留；不會丟資料，但舊的逐 commit 歷史會消失。
+- 壓縮期間（鎖存在時）上傳會被延後，不是被丟棄。
+
+### 15.4 使用者需要在 Cloudflare 新增的項目（Phase 3 增量）
+| 類型 | 名稱 | 說明 |
+|---|---|---|
+| Secret | `TURN_KEY_ID` | Cloudflare Calls 的 TURN key ID（沒有則只用 STUN） |
+| Secret | `TURN_API_TOKEN` | Cloudflare Calls API token（只給 TURN 用） |
+| Cron Trigger | `0 19 * * *` | 每日壓縮（在 worker 的 Triggers 設定） |
+| KV | 既有 `KV` | 信令信箱與壓縮鎖沿用 |
+| Secret | `GH_TOKEN` | 既有；壓縮需要 repo 的 Contents 與 Git Data 寫入權限（fine-grained token 要有 Contents: read/write） |
+| Worker | 重新部署 | 本版 worker 新增了 `video` 分類、帳號路徑、壓縮與 TURN 路由 |
+
+注意：既有的歸檔檔案仍在舊路徑（`YYYY-MM/...`），新版寫入 `accounts/...`。若需要，請自行搬移舊資料。
