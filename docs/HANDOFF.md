@@ -7,7 +7,8 @@ Continue from the handoff document at D:\Downloads\personal_meeting_app\docs\HAN
 - Repo: D:\Downloads\personal_meeting_app (branch main, remote git@github.com:sunneo/personal_meeting_app.git, currently only README+LICENSE, commit 8f0f821). Public page: https://sunneo.github.io/personal_meeting_app/ (GitHub Pages; static web app, so no server code in-repo).
 - Reference/shared infra: D:\Downloads\videos-嗨投資-desktop-app\desktop-app (huge; do NOT scan it wholesale). Cloudflare worker example: desktop-app\cloudflare\fa-worker\README.md. Supabase/cloudflare usage mentioned in DESIGN.remote-group.md, DESIGN.release.md, DESIGN.sandbox-worker.md, features\FEATURES.md. Goal: reuse the SAME Cloudflare + Supabase projects as the desktop-app (read its config/env names; never commit secrets).
 - Goal: a messenger web app (static, GitHub Pages).
-- Done so far: nothing implemented.
+- Done so far (all todo 1–9 committed on main; NOT pushed, NOT deployed): DESIGN.md `690197e`; scaffold `aa8935e`; text+TTS `4fc55c3`; files `d26ed46`; voice+subtitles `ce18306`; IndexedDB+persist `35e348e`; Supabase path A `f3c8e01` + wiring `a7a37a9`; Cloudflare archive-worker path B `f3dab73`; tests+README `ae135a1`.
+- Not yet verified in a real browser (only syntax-checked and pure-logic tests run). Not yet wired: UI for attachments to path B, Supabase history pull, `js/config.js` values (user to fill).
 
 ## 3. Todo (ordered)
 1. Read the desktop-app cloudflare/supabase docs above (targeted reads only); write docs/DESIGN.md: architecture, Supabase tables/storage, Cloudflare worker routes, message JSONL schema.
