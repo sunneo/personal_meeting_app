@@ -6,6 +6,7 @@ import { initSocial } from './social.js';
 import { initCallUi } from './call-ui.js';
 import { initRecordingLibrary } from './recordings.js';
 import { buildBackupZip, restoreBackupZip, maybeUploadDailyBackup } from './backup.js';
+import { validateLogin, validateRegister, viewFor, describeFailure } from './core/auth-form.js';
 import { putMessage } from './supabase-store.js';
 import { initSettings } from './settings.js';
 import {
@@ -376,13 +377,18 @@ fileInput.addEventListener('change', () => {
 });
 
 // ---- 帳號：代號 + 密碼登入（歸檔需要）；註冊需要邀請碼
-const acct = document.getElementById('account');
-const acctSummary = document.getElementById('acct-summary');
-const acctMsg = document.getElementById('acct-msg');
+const gateEl = document.getElementById('auth-gate');
+const mainEl = document.getElementById('app-main');
+const headerEl = document.querySelector('header.topbar');
 const loginForm = document.getElementById('login-form');
 const registerForm = document.getElementById('register-form');
-const btnToggleReg = document.getElementById('btn-toggle-reg');
+const gateMsg = document.getElementById('gate-msg');
+const btnTabLogin = document.getElementById('tab-login');
+const btnTabRegister = document.getElementById('tab-register');
+const btnLogout = document.getElementById('btn-logout');
+const acctStatus = document.getElementById('acct-status');
 let currentCode = '';
+let offlineChosen = false;
 let callUi = null;
 let recLib = null;
 function onLoggedIn() {
@@ -419,57 +425,125 @@ document.getElementById('backup-restore').addEventListener('change', async (e) =
   }
 });
 
-function setAcctStatus() {
-  acctSummary.textContent = isLoggedIn() ? `已登入：${currentCode}（歸檔已啟用）` : '未登入（長期歸檔需要登入）';
+// ---- 畫面切換：未登入只顯示登入／註冊卡片；登入成功或選離線模式才顯示聊天
+function refreshView() {
+  const v = viewFor({ loggedIn: isLoggedIn(), offlineChosen });
+  gateEl.hidden = v !== 'gate';
+  mainEl.hidden = v !== 'main';
+  headerEl.hidden = v === 'gate';
+  setAcctStatus();
 }
 
-btnToggleReg.addEventListener('click', () => {
-  const showReg = registerForm.hidden;
-  registerForm.hidden = !showReg;
-  loginForm.hidden = showReg;
-  btnToggleReg.textContent = showReg ? '已有帳號？登入' : '沒有帳號？註冊';
-  acctMsg.textContent = '';
-});
+function setAcctStatus() {
+  const logged = isLoggedIn();
+  acctStatus.textContent = logged ? '已登入：' + currentCode : offlineChosen ? '離線本地模式（未登入）' : '';
+  btnLogout.textContent = logged ? '登出' : '登入';
+  btnLogout.hidden = !logged && !offlineChosen;
+}
+
+function showGateError(text) {
+  gateMsg.textContent = text;
+}
+
+function setBusy(on) {
+  for (const btn of document.querySelectorAll('.gate-submit')) btn.disabled = on;
+}
+
+function showTab(which) {
+  const isLogin = which === 'login';
+  loginForm.hidden = !isLogin;
+  registerForm.hidden = isLogin;
+  btnTabLogin.setAttribute('aria-selected', String(isLogin));
+  btnTabRegister.setAttribute('aria-selected', String(!isLogin));
+  gateMsg.textContent = '';
+}
+btnTabLogin.addEventListener('click', () => showTab('login'));
+btnTabRegister.addEventListener('click', () => showTab('register'));
+
+// 登入成功：記住代號、清掉密碼欄、顯示聊天畫面、補傳與備份
+function onAuthSuccess(code) {
+  currentCode = code;
+  offlineChosen = false;
+  loginForm.password.value = '';
+  registerForm.password.value = '';
+  registerForm.password2.value = '';
+  registerForm.invite.value = '';
+  gateMsg.textContent = '';
+  refreshView();
+  flushPending();
+  onLoggedIn();
+  social.refresh();
+}
+
+function noServiceMessage() {
+  return archiveConfigured() ? '' : '尚未設定歸檔網址（js/config.js），無法登入。可先用離線本地模式。';
+}
 
 loginForm.addEventListener('submit', async (e) => {
   e.preventDefault();
-  if (!archiveConfigured()) { acctMsg.textContent = '尚未設定歸檔網址（js/config.js）'; return; }
   const code = loginForm.code.value.trim().toLowerCase();
-  const r = await login(code, loginForm.password.value);
-  if (r.ok) {
-    currentCode = code;
-    loginForm.password.value = '';
-    acctMsg.textContent = '登入成功。';
-    setAcctStatus();
-    flushPending();
-    onLoggedIn();
-  } else {
-    acctMsg.textContent = (r.data && r.data.error) || `登入失敗（${r.status}）`;
+  const password = loginForm.password.value;
+  const bad = validateLogin({ code, password });
+  if (bad) return showGateError(bad);
+  if (noServiceMessage()) return showGateError(noServiceMessage());
+  setBusy(true);
+  let r;
+  try {
+    r = await login(code, password);
+  } catch (_) {
+    r = { networkError: true };
   }
+  setBusy(false);
+  if (r.ok && r.data && r.data.token) return onAuthSuccess(code);
+  showGateError(describeFailure(r.ok ? { status: r.status, data: r.data } : r, '登入'));
 });
 
 registerForm.addEventListener('submit', async (e) => {
   e.preventDefault();
-  if (!archiveConfigured()) { acctMsg.textContent = '尚未設定歸檔網址（js/config.js）'; return; }
   const f = registerForm;
-  if (f.password.value !== f.password2.value) { acctMsg.textContent = '兩次輸入的密碼不一致。'; return; }
   const code = f.code.value.trim().toLowerCase();
-  const r = await register(code, f.password.value, f.invite.value);
-  if (!r.ok) { acctMsg.textContent = (r.data && r.data.error) || `註冊失敗（${r.status}）`; return; }
-  const l = await login(code, f.password.value);
-  f.password.value = ''; f.password2.value = '';
-  if (l.ok) {
-    currentCode = code;
-    acctMsg.textContent = '註冊並登入成功。';
-    setAcctStatus();
-    flushPending();
-    onLoggedIn();
-  } else {
-    acctMsg.textContent = '註冊成功，請用新帳號登入。';
+  const bad = validateRegister({ code, password: f.password.value, password2: f.password2.value, invite: f.invite.value });
+  if (bad) return showGateError(bad);
+  if (noServiceMessage()) return showGateError(noServiceMessage());
+  setBusy(true);
+  let r;
+  try {
+    r = await register(code, f.password.value, f.invite.value.trim());
+  } catch (_) {
+    r = { networkError: true };
   }
+  if (!r.ok) { setBusy(false); return showGateError(describeFailure(r, '註冊')); }
+  let l;
+  try {
+    l = await login(code, f.password.value);
+  } catch (_) {
+    l = { networkError: true };
+  }
+  setBusy(false);
+  if (l.ok && l.data && l.data.token) return onAuthSuccess(code);
+  showTab('login');
+  loginForm.code.value = code;
+  showGateError('註冊成功，請用新帳號登入。');
 });
 
-setAcctStatus();
+// 離線本地模式：不代表已登入，只開啟本機聊天
+document.getElementById('btn-offline').addEventListener('click', () => {
+  offlineChosen = true;
+  refreshView();
+});
+
+// 登出（已登入）→ 回到登入卡片；離線模式下按「登入」→ 回到登入卡片
+btnLogout.addEventListener('click', () => {
+  if (isLoggedIn()) {
+    logout();
+    currentCode = '';
+    if (callUi) callUi.disconnect();
+  }
+  offlineChosen = false;
+  refreshView();
+});
+
+refreshView();
 initSettings();
 const social = initSocial(() => (isLoggedIn() ? currentCode : ''));
 callUi = initCallUi(() => (isLoggedIn() ? currentCode : ''), () => recLib && recLib.refresh());
@@ -478,9 +552,6 @@ document.getElementById('btn-call-toggle').addEventListener('click', () => {
   const p = document.getElementById('call-panel');
   p.hidden = !p.hidden;
 });
-// 登入狀態改變時刷新分享代號
-loginForm.addEventListener('submit', () => setTimeout(() => social.refresh(), 0));
-registerForm.addEventListener('submit', () => setTimeout(() => social.refresh(), 0));
 requestPersistence();
 messages.push(...(await loadMessages()));
 render();
