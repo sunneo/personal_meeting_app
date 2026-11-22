@@ -92,9 +92,9 @@
     </details>
     <details id="account" class="account">
       <summary id="acct-summary">未登入（長期歸檔需要登入）</summary>
-      <form id="login-form" autocomplete="on">
-        <input name="code" placeholder="帳號代號" required pattern="[A-Za-z0-9_-]{3,32}" autocomplete="username">
-        <input name="password" type="password" placeholder="密碼" required autocomplete="current-password">
+      <form id="login-form" autocomplete="off">
+        <input name="code" placeholder="帳號代號" required pattern="[A-Za-z0-9_-]{3,32}" autocomplete="off" autocapitalize="none" spellcheck="false">
+        <input name="password" type="password" placeholder="密碼" required autocomplete="new-password">
         <button type="submit">登入</button>
       </form>
       <form id="register-form" autocomplete="on" hidden>
