@@ -1,6 +1,9 @@
 // 入口：本地模式。之後的功能（傳輸、長期儲存）依 docs/HANDOFF.md 的 todo 逐步加入。
 import { requestPersistence, saveMessage, loadMessages } from './store.js';
 import { putMessage } from './supabase-store.js';
+import {
+  archiveConfigured, isLoggedIn, login, register, logout, archiveAppend, archiveAttachment,
+} from './archive-client.js';
 
 
 const conv = document.getElementById('conversation');
@@ -13,27 +16,59 @@ const messages = [];
 /** 新增一則訊息：先放進記憶體顯示，再寫入 IndexedDB。 */
 function pushMessage(msg) {
   messages.push(msg);
-  msg.pendingSync = true; // 長期 A 尚未確認寫入；成功後才清掉
+  msg.pendingSync = true;                    // 長期 A（Supabase）尚未確認寫入
+  msg.archivePending = archiveConfigured();  // 長期 B（Cloudflare 歸檔）尚未完成
+  msg.archiveAppended = false;
   saveMessage(msg);
   render();
   syncOne(msg);
 }
 
-/** 嘗試把單則訊息寫入 Supabase（備援全失敗就保留 pendingSync，不丟失）。 */
+const busy = new WeakSet();
+
+/**
+ * 把單則訊息同步到兩條長期路徑；失敗的部分保留待補傳旗標，不丟失。
+ * - A：Supabase（備援全失敗就保留 pendingSync）
+ * - B：歸檔（先上傳附件，附件全成功才 append JSONL；附件已成功的不重傳，append 成功後不再重送）
+ */
 async function syncOne(msg) {
-  if (!msg.pendingSync) return;
-  const ok = await putMessage(msg);
-  if (ok) {
-    msg.pendingSync = false;
+  if (busy.has(msg)) return;
+  busy.add(msg);
+  let changed = false;
+  try {
+    if (msg.pendingSync && (await putMessage(msg))) {
+      msg.pendingSync = false;
+      changed = true;
+    }
+    if (msg.archivePending && isLoggedIn()) {
+      let ok = true;
+      for (const att of msg.attachments || []) {
+        if (att.archived) continue;
+        const r = await archiveAttachment(att, msg.ts);
+        if (r.ok) { att.archived = true; changed = true; } else { ok = false; break; }
+      }
+      if (ok && !msg.archiveAppended) {
+        const r = await archiveAppend(msg);
+        if (r.ok) { msg.archiveAppended = true; changed = true; }
+      }
+      if (msg.archiveAppended) {
+        msg.archivePending = false;
+        changed = true;
+      }
+    }
+  } finally {
+    busy.delete(msg);
+  }
+  if (changed) {
     await saveMessage(msg);
     render();
   }
 }
 
-/** 補傳所有待補傳的訊息。 */
+/** 補傳所有待補傳的訊息（啟動、定時、上線、登入後都會呼叫）。 */
 async function flushPending() {
   for (const m of messages) {
-    if (m.pendingSync) await syncOne(m);
+    if (m.pendingSync || m.archivePending) await syncOne(m);
   }
 }
 
@@ -232,6 +267,64 @@ fileInput.addEventListener('change', () => {
   });
 });
 
+// ---- 帳號：代號 + 密碼登入（歸檔需要）；註冊需要邀請碼
+const acct = document.getElementById('account');
+const acctSummary = document.getElementById('acct-summary');
+const acctMsg = document.getElementById('acct-msg');
+const loginForm = document.getElementById('login-form');
+const registerForm = document.getElementById('register-form');
+const btnToggleReg = document.getElementById('btn-toggle-reg');
+let currentCode = '';
+
+function setAcctStatus() {
+  acctSummary.textContent = isLoggedIn() ? `已登入：${currentCode}（歸檔已啟用）` : '未登入（長期歸檔需要登入）';
+}
+
+btnToggleReg.addEventListener('click', () => {
+  const showReg = registerForm.hidden;
+  registerForm.hidden = !showReg;
+  loginForm.hidden = showReg;
+  btnToggleReg.textContent = showReg ? '已有帳號？登入' : '沒有帳號？註冊';
+  acctMsg.textContent = '';
+});
+
+loginForm.addEventListener('submit', async (e) => {
+  e.preventDefault();
+  if (!archiveConfigured()) { acctMsg.textContent = '尚未設定歸檔網址（js/config.js）'; return; }
+  const code = loginForm.code.value.trim().toLowerCase();
+  const r = await login(code, loginForm.password.value);
+  if (r.ok) {
+    currentCode = code;
+    loginForm.password.value = '';
+    acctMsg.textContent = '登入成功。';
+    setAcctStatus();
+    flushPending();
+  } else {
+    acctMsg.textContent = (r.data && r.data.error) || `登入失敗（${r.status}）`;
+  }
+});
+
+registerForm.addEventListener('submit', async (e) => {
+  e.preventDefault();
+  if (!archiveConfigured()) { acctMsg.textContent = '尚未設定歸檔網址（js/config.js）'; return; }
+  const f = registerForm;
+  if (f.password.value !== f.password2.value) { acctMsg.textContent = '兩次輸入的密碼不一致。'; return; }
+  const code = f.code.value.trim().toLowerCase();
+  const r = await register(code, f.password.value, f.invite.value);
+  if (!r.ok) { acctMsg.textContent = (r.data && r.data.error) || `註冊失敗（${r.status}）`; return; }
+  const l = await login(code, f.password.value);
+  f.password.value = ''; f.password2.value = '';
+  if (l.ok) {
+    currentCode = code;
+    acctMsg.textContent = '註冊並登入成功。';
+    setAcctStatus();
+    flushPending();
+  } else {
+    acctMsg.textContent = '註冊成功，請用新帳號登入。';
+  }
+});
+
+setAcctStatus();
 requestPersistence();
 messages.push(...(await loadMessages()));
 render();

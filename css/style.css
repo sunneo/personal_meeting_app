@@ -90,6 +90,12 @@ body {
 .attachment .pdf-view { width: 100%; height: 360px; border: 1px solid var(--border); border-radius: 6px; }
 .attachment a { color: var(--accent); word-break: break-all; }
 
+.account { margin: 8px 0; font-size: 14px; }
+.account form { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 6px; }
+.account input { padding: 6px 8px; border: 1px solid var(--border); border-radius: 6px; background: var(--bubble-other); color: var(--fg); min-width: 0; flex: 1 1 140px; }
+.account button { padding: 6px 10px; border-radius: 6px; border: 1px solid var(--border); background: var(--bubble-other); color: var(--fg); cursor: pointer; }
+.acct-msg { color: var(--muted); margin: 4px 0 0; }
+
 .composer {
   display: flex;
   gap: 8px;

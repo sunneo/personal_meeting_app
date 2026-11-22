@@ -17,6 +17,23 @@
       <p class="empty">尚無訊息。</p>
     </section>
 
+    <details id="account" class="account">
+      <summary id="acct-summary">未登入（長期歸檔需要登入）</summary>
+      <form id="login-form" autocomplete="on">
+        <input name="code" placeholder="帳號代號" required pattern="[A-Za-z0-9_-]{3,32}" autocomplete="username">
+        <input name="password" type="password" placeholder="密碼" required autocomplete="current-password">
+        <button type="submit">登入</button>
+      </form>
+      <form id="register-form" autocomplete="on" hidden>
+        <input name="code" placeholder="帳號代號（3–32 字元）" required pattern="[A-Za-z0-9_-]{3,32}" autocomplete="username">
+        <input name="password" type="password" placeholder="密碼（至少 8 字元）" required minlength="8" autocomplete="new-password">
+        <input name="password2" type="password" placeholder="再輸入一次密碼" required minlength="8" autocomplete="new-password">
+        <input name="invite" placeholder="邀請碼" required autocomplete="off">
+        <button type="submit">註冊</button>
+      </form>
+      <button type="button" id="btn-toggle-reg">沒有帳號？註冊</button>
+      <p id="acct-msg" class="acct-msg"></p>
+    </details>
     <form id="composer" class="composer" autocomplete="off">
       <button type="button" id="btn-voice" title="錄製語音">🎤</button>
       <label class="attach" title="傳送檔案">
