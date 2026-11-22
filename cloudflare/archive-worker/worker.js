@@ -4,7 +4,8 @@
 //   YYYY-MM/manifest.json        本月附件清單
 //   YYYY-MM/<category>/<name>    附件；超過 20MB 的檔案由前端切成 <name>.partNNN
 //
-// Secrets（只存在 Cloudflare）：GH_TOKEN、SESSION_SECRET（≥32 字元）、INVITE_CODE（註冊用）
+// Secrets（只存在 Cloudflare）：GH_TOKEN、SESSION_SECRET（≥32 字元）；選填：INVITE_CODE（REGISTRATION_MODE=invite 時）、TURNSTILE_SECRET（人機驗證）
+// 變數：REGISTRATION_MODE（open 預設 / invite / closed）；防濫用見 abuse.js 與 docs/DESIGN.auth.md 第 7 節
 // Variables：ARCHIVE_REPO、ARCHIVE_BRANCH
 // KV binding：KV（帳號紀錄 acct:<代號>）
 import {
@@ -13,6 +14,10 @@ import {
 } from './auth.js';
 import { buildIceServers, fetchTurnCredentials, mailboxPush, mailboxDrain } from './rtc.js';
 import { accountPath, planSquash, lockActive, headStillValid, LOCK_TTL_SEC } from './squash.js';
+import {
+  normalizeRegistrationMode, registrationDecision, isReservedCode, normalizeIp, regRateKeys,
+  checkRegistrationRate, quotaKeys, checkDailyAppend, checkAttachmentQuota, verifyTurnstile,
+} from './abuse.js';
 
 /** 附件 part 路徑：只有一份不加後綴，否則 .partNNN（base 已含帳號與分類）。 */
 export function partPathFromBase(base, index, total) {
@@ -126,13 +131,30 @@ async function putAcct(env, code, rec) {
 }
 
 async function handleRegister(env, req) {
-  if (!env.INVITE_CODE) return json({ error: '尚未設定 INVITE_CODE，註冊已關閉' }, 403);
   const b = await req.json();
+  const enc = new TextEncoder();
+  // 1) 註冊模式（open 預設；invite 需要 INVITE_CODE；closed 拒絕）
+  const mode = normalizeRegistrationMode(env.REGISTRATION_MODE);
+  const inviteStr = typeof b.invite === 'string' ? b.invite.trim() : '';
+  const inviteOk = Boolean(env.INVITE_CODE) && constantTimeEqual(enc.encode(inviteStr), enc.encode(String(env.INVITE_CODE)));
+  const dec = registrationDecision(mode, { inviteConfigured: Boolean(env.INVITE_CODE), inviteOk });
+  if (!dec.allowed) return json({ error: dec.error }, dec.status);
+  // 2) 人機驗證（只有設定 TURNSTILE_SECRET 才要求）
+  const ip = normalizeIp(req.headers.get('CF-Connecting-IP'));
+  const ts = await verifyTurnstile(b.turnstile, ip, env.TURNSTILE_SECRET);
+  if (!ts.ok) return json({ error: ts.error }, 403);
+  // 3) 每個 IP 的註冊頻率（每小時 5、每天 10；失敗的嘗試也計入，防止暴力試代號）
+  const rk = regRateKeys(ip, Date.now());
+  const hourCount = Number(await env.KV.get(rk.hour)) || 0;
+  const dayCount = Number(await env.KV.get(rk.day)) || 0;
+  const rate = checkRegistrationRate({ hour: hourCount, day: dayCount });
+  if (!rate.ok) return json({ error: rate.error }, rate.status);
+  await env.KV.put(rk.hour, String(hourCount + 1), { expirationTtl: 7200 });
+  await env.KV.put(rk.day, String(dayCount + 1), { expirationTtl: 2 * 86400 });
+  // 4) 代號與密碼
   const code = normalizeCode(b.code);
-  if (!constantTimeEqual(new TextEncoder().encode(String(b.invite || '')), new TextEncoder().encode(env.INVITE_CODE))) {
-    return json({ error: '邀請碼不對' }, 403);
-  }
   if (!validCode(code)) return json({ error: '代號格式不對（3–32 字元：小寫英數、底線、連字號）' }, 400);
+  if (isReservedCode(code)) return json({ error: '這個代號不能使用' }, 400);
   if (!validPassword(b.password)) return json({ error: '密碼至少 8 字元' }, 400);
   if (await getAcct(env, code)) return json({ error: '這個代號已被使用' }, 409);
   const pw = await hashPassword(b.password);
@@ -184,6 +206,12 @@ async function handleAppend(env, req, code) {
   const month = monthOf(msg.ts);
   const line = JSON.stringify(msg) + '\n';
   const path = accountPath(code, month, 'conversation.jsonl');
+  const now = Date.now();
+  const qk = quotaKeys(code, now);
+  const dayUse = (await env.KV.get(qk.day, 'json')) || { count: 0 };
+  const qa = checkDailyAppend(dayUse);
+  if (!qa.ok) return json({ error: qa.error }, qa.status);
+  await env.KV.put(qk.day, JSON.stringify({ count: dayUse.count + 1, parts: dayUse.parts || 0 }), { expirationTtl: 2 * 86400 });
   await updateFile(env, path, (old) => (old ? old : '') + line, `archive: ${code} ${month} message ${msg.id}`);
   return json({ ok: true, month });
 }
@@ -199,6 +227,16 @@ async function handleAttachment(env, req, code) {
   }
   const bin = atob(b.data || '');
   if (bin.length > MAX_PART_BYTES) return json({ error: '單一 part 超過 20MB' }, 413);
+
+  const now = Date.now();
+  const qk = quotaKeys(code, now);
+  const dayUse = (await env.KV.get(qk.day, 'json')) || { count: 0, parts: 0 };
+  const monUse = (await env.KV.get(qk.month, 'json')) || { bytes: 0 };
+  const declared = Number(b.size) > 0 ? Number(b.size) : bin.length;
+  const qa = checkAttachmentQuota({ bytes: monUse.bytes, parts: dayUse.parts || 0 }, declared, bin.length);
+  if (!qa.ok) return json({ error: qa.error }, qa.status);
+  await env.KV.put(qk.day, JSON.stringify({ count: dayUse.count || 0, parts: (dayUse.parts || 0) + 1 }), { expirationTtl: 2 * 86400 });
+  await env.KV.put(qk.month, JSON.stringify({ bytes: monUse.bytes + bin.length }), { expirationTtl: 40 * 86400 });
 
   const base = accountPath(code, b.month, `${b.category}/${b.name}`);
   const path = partPathFromBase(base, b.index, b.total);
