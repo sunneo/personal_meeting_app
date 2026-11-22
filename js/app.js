@@ -7,6 +7,7 @@ import { initCallUi } from './call-ui.js';
 import { initRecordingLibrary } from './recordings.js';
 import { buildBackupZip, restoreBackupZip, maybeUploadDailyBackup } from './backup.js';
 import { validateLogin, validateRegister, viewFor, describeFailure } from './core/auth-form.js';
+import { TURNSTILE_SITEKEY } from './config.js';
 import { putMessage } from './supabase-store.js';
 import { initSettings } from './settings.js';
 import {
@@ -467,7 +468,6 @@ function onAuthSuccess(code) {
   loginForm.password.value = '';
   registerForm.password.value = '';
   registerForm.password2.value = '';
-  registerForm.invite.value = '';
   gateMsg.textContent = '';
   refreshView();
   flushPending();
@@ -502,17 +502,19 @@ registerForm.addEventListener('submit', async (e) => {
   e.preventDefault();
   const f = registerForm;
   const code = f.code.value.trim().toLowerCase();
-  const bad = validateRegister({ code, password: f.password.value, password2: f.password2.value, invite: f.invite.value });
+  const bad = validateRegister({ code, password: f.password.value, password2: f.password2.value });
   if (bad) return showGateError(bad);
   if (noServiceMessage()) return showGateError(noServiceMessage());
+  const token = turnstileToken();
+  if (TURNSTILE_SITEKEY && !token) return showGateError('請先完成人機驗證');
   setBusy(true);
   let r;
   try {
-    r = await register(code, f.password.value, f.invite.value.trim());
+    r = await register(code, f.password.value, token);
   } catch (_) {
     r = { networkError: true };
   }
-  if (!r.ok) { setBusy(false); return showGateError(describeFailure(r, '註冊')); }
+  if (!r.ok) { setBusy(false); resetTurnstile(); return showGateError(describeFailure(r, '註冊')); }
   let l;
   try {
     l = await login(code, f.password.value);
@@ -525,6 +527,31 @@ registerForm.addEventListener('submit', async (e) => {
   loginForm.code.value = code;
   showGateError('註冊成功，請用新帳號登入。');
 });
+
+// ---- Turnstile（選填）：有 sitekey 才載入官方 widget；worker 只有設定 TURNSTILE_SECRET 才會驗證
+let turnstileWidget = null;
+function loadTurnstile() {
+  if (!TURNSTILE_SITEKEY) return;
+  const box = document.getElementById('turnstile-box');
+  box.hidden = false;
+  const s = document.createElement('script');
+  s.src = 'https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit';
+  s.async = true;
+  s.onload = () => {
+    turnstileWidget = window.turnstile.render(box, { sitekey: TURNSTILE_SITEKEY, theme: 'auto' });
+  };
+  document.head.append(s);
+}
+function turnstileToken() {
+  if (!TURNSTILE_SITEKEY || !window.turnstile || turnstileWidget === null) return '';
+  try { return window.turnstile.getResponse(turnstileWidget) || ''; } catch (_) { return ''; }
+}
+function resetTurnstile() {
+  if (TURNSTILE_SITEKEY && window.turnstile && turnstileWidget !== null) {
+    try { window.turnstile.reset(turnstileWidget); } catch (_) { /* 忽略 */ }
+  }
+}
+loadTurnstile();
 
 // 離線本地模式：不代表已登入，只開啟本機聊天
 document.getElementById('btn-offline').addEventListener('click', () => {

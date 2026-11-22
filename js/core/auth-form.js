@@ -16,12 +16,12 @@ export function validateLogin({ code, password }) {
 }
 
 /** 註冊表單驗證：回傳錯誤訊息，或 null。 */
-export function validateRegister({ code, password, password2, invite }) {
+// 開放註冊：不需要邀請碼（防濫用由 worker 的 IP 頻率、人機驗證與配額負責）。
+export function validateRegister({ code, password, password2 }) {
   const c = normalizeLoginCode(code);
   if (!CODE_RE.test(c)) return '帳號代號格式不對（3–32 字元：英數、底線、連字號）';
   if (typeof password !== 'string' || password.length < 8) return '密碼至少 8 字元';
   if (password !== password2) return '兩次輸入的密碼不一致';
-  if (typeof invite !== 'string' || invite.trim().length === 0) return '請輸入邀請碼';
   return null;
 }
 

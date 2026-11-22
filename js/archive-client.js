@@ -45,9 +45,9 @@ async function call(method, path, body, withAuth = true) {
   }
 }
 
-/** 註冊：代號 + 密碼 + 邀請碼。 */
-export async function register(code, password, invite) {
-  return call('POST', '/register', { code, password, invite }, false);
+/** 註冊：代號 + 密碼（開放註冊，不需邀請碼）；turnstile 為人機驗證 token（沒設定 sitekey 時可為空）。 */
+export async function register(code, password, turnstile = '') {
+  return call('POST', '/register', { code, password, turnstile }, false);
 }
 
 /** 登入：成功後把 token 存在記憶體。 */

@@ -234,3 +234,4 @@ body {
   font-size: 14px;
   padding: 6px;
 }
+.ts-box { min-height: 65px; display: flex; justify-content: center; }

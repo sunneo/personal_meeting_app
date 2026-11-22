@@ -14,3 +14,6 @@ export const SUPABASE_PUBLISHABLE_KEY = SUPABASE_PROJECTS[0].key;
 
 // 長期路徑 B（Cloudflare Worker）的網址，之後才會用到。
 export const ARCHIVE_WORKER_URL = 'https://personal-meeting.sunneo529.workers.dev';
+
+// Cloudflare Turnstile 的公開 sitekey（選填；沒有就不顯示人機驗證，worker 那邊也要不設定 TURNSTILE_SECRET）。
+export const TURNSTILE_SITEKEY = '';

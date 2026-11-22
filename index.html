@@ -33,10 +33,8 @@
         </label>
         <label>確認密碼
           <input name="password2" type="password" required minlength="8" autocomplete="new-password">
-        </label>
-        <label>邀請碼
-          <input name="invite" required autocomplete="off">
-        </label>
+        </label>
+        <div id="turnstile-box" class="ts-box" hidden></div>
         <button type="submit" class="gate-submit">註冊</button>
       </form>
       <p id="gate-msg" class="gate-msg" role="alert"></p>
