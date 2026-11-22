@@ -1,5 +1,6 @@
 // 入口：本地模式。之後的功能（傳輸、長期儲存）依 docs/HANDOFF.md 的 todo 逐步加入。
 import { requestPersistence, saveMessage, loadMessages } from './store.js';
+import { putMessage } from './supabase-store.js';
 
 const conv = document.getElementById('conversation');
 const form = document.getElementById('composer');
@@ -12,6 +13,7 @@ const messages = [];
 function pushMessage(msg) {
   messages.push(msg);
   saveMessage(msg);
+  putMessage(msg); // 長期路徑 A（未設定 Supabase 時自動略過）
   render();
 }
 
