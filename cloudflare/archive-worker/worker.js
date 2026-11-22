@@ -12,6 +12,12 @@ import {
   loginGate, afterFailure, afterSuccess, constantTimeEqual, TOKEN_TTL_SEC,
 } from './auth.js';
 import { buildIceServers, fetchTurnCredentials, mailboxPush, mailboxDrain } from './rtc.js';
+import { accountPath, planSquash, lockActive, headStillValid, LOCK_TTL_SEC } from './squash.js';
+
+/** 附件 part 路徑：只有一份不加後綴，否則 .partNNN（base 已含帳號與分類）。 */
+export function partPathFromBase(base, index, total) {
+  return total > 1 ? `${base}.part${String(index).padStart(3, '0')}` : base;
+}
 
 const MAX_PART_BYTES = 20 * 1024 * 1024;
 const TZ_OFFSET_MS = 8 * 60 * 60 * 1000; // 月份以 UTC+8 切分（見 docs/DESIGN.md）
@@ -162,18 +168,28 @@ async function authedCode(env, req) {
   return v ? v.sub : null;
 }
 
-// ---- 歸檔端點（需要 token）
+// ---- 歸檔端點（需要 token）。所有路徑都在 accounts/<代號>/ 底下，代號來自 token，不來自請求。
+async function squashing(env) {
+  const lock = await env.KV.get('squash-lock', 'json');
+  return lockActive(lock, Date.now());
+}
+
+const BUSY = () => json({ error: '歸檔正在整理中，請稍後重試' }, 503);
+
 async function handleAppend(env, req, code) {
+  if (await squashing(env)) return BUSY();
   const msg = await req.json();
   if (!msg || typeof msg.id !== 'string' || typeof msg.ts !== 'number') return json({ error: '訊息格式不對' }, 400);
   msg.from = code; // 發送者以登入的帳號為準，避免冒充
   const month = monthOf(msg.ts);
   const line = JSON.stringify(msg) + '\n';
-  await updateFile(env, `${month}/conversation.jsonl`, (old) => (old ? old : '') + line, `archive: ${month} message ${msg.id}`);
+  const path = accountPath(code, month, 'conversation.jsonl');
+  await updateFile(env, path, (old) => (old ? old : '') + line, `archive: ${code} ${month} message ${msg.id}`);
   return json({ ok: true, month });
 }
 
-async function handleAttachment(env, req) {
+async function handleAttachment(env, req, code) {
+  if (await squashing(env)) return BUSY();
   const b = await req.json();
   if (!validMonth(b.month) || !CATEGORIES.has(b.category) || !validName(b.name)) {
     return json({ error: '月份、分類或檔名不對' }, 400);
@@ -184,31 +200,86 @@ async function handleAttachment(env, req) {
   const bin = atob(b.data || '');
   if (bin.length > MAX_PART_BYTES) return json({ error: '單一 part 超過 20MB' }, 413);
 
-  const path = partPath(b.month, b.category, b.name, b.index, b.total);
+  const base = accountPath(code, b.month, `${b.category}/${b.name}`);
+  const path = partPathFromBase(base, b.index, b.total);
   const cur = await ghGet(env, path);
-  await ghPut(env, path, b.data, cur ? cur.sha : undefined, `archive: ${b.month} ${b.category} ${b.name} part ${b.index}/${b.total}`);
+  await ghPut(env, path, b.data, cur ? cur.sha : undefined, `archive: ${code} ${b.month} ${b.category} ${b.name} part ${b.index}/${b.total}`);
 
   if (b.index === b.total && b.sha256) {
     await updateFile(
       env,
-      `${b.month}/manifest.json`,
+      accountPath(code, b.month, 'manifest.json'),
       (old) => {
-        const m = old ? JSON.parse(old) : { month: b.month, attachments: [] };
+        const m = old ? JSON.parse(old) : { account: code, month: b.month, attachments: [] };
         m.attachments = m.attachments.filter((a) => !(a.category === b.category && a.name === b.name));
         m.attachments.push({ name: b.name, category: b.category, sha256: b.sha256, size: b.size || null, total: b.total });
         return JSON.stringify(m, null, 2);
       },
-      `archive: ${b.month} manifest (${b.name})`
+      `archive: ${code} ${b.month} manifest (${b.name})`
     );
   }
   return json({ ok: true, path });
 }
 
-async function handleManifest(env, url) {
+async function handleManifest(env, url, code) {
   const month = url.searchParams.get('month');
   if (!validMonth(month)) return json({ error: '月份格式應為 YYYY-MM' }, 400);
-  const cur = await ghGet(env, `${month}/manifest.json`);
-  return json(cur ? JSON.parse(b64ToUtf8(cur.b64)) : { month, attachments: [] });
+  const cur = await ghGet(env, accountPath(code, month, 'manifest.json'));
+  return json(cur ? JSON.parse(b64ToUtf8(cur.b64)) : { account: code, month, attachments: [] });
+}
+
+// ---- 每日壓縮（squash）：用 Git Data API 把 base 之後的所有 commit 壓成一個。
+// 規則：base（最舊的 commit）永遠不動；壓縮期間 KV 的 squash-lock 會讓上傳回 503 重試；
+// 更新 ref 前再確認 head 沒變；ref 用 force 更新（改寫歷史，GitHub 要等自己的 GC 才會真正縮小）。
+async function ghApi(env, method, p, body) {
+  const res = await fetch(`https://api.github.com/repos/${env.ARCHIVE_REPO}${p}`, {
+    method,
+    headers: { ...ghHeaders(env), ...(body ? { 'Content-Type': 'application/json' } : {}) },
+    body: body ? JSON.stringify(body) : undefined,
+  });
+  if (!res.ok) throw new Error(`GitHub ${method} ${p} 失敗：${res.status}`);
+  return res.json();
+}
+
+async function listAllCommits(env) {
+  const out = [];
+  for (let page = 1; page <= 20; page++) {
+    const batch = await ghApi(env, 'GET', `/commits?sha=${encodeURIComponent(env.ARCHIVE_BRANCH)}&per_page=100&page=${page}`);
+    out.push(...batch);
+    if (batch.length < 100) break;
+  }
+  return out.map((c) => ({ sha: c.sha, date: Date.parse(c.commit.committer.date) })).reverse(); // 舊 → 新
+}
+
+export async function squashArchive(env) {
+  const now = Date.now();
+  if (lockActive(await env.KV.get('squash-lock', 'json'), now)) return { skipped: 'locked' };
+  await env.KV.put('squash-lock', JSON.stringify({ at: now }), { expirationTtl: LOCK_TTL_SEC });
+  try {
+    const ref = await ghApi(env, 'GET', `/git/ref/heads/${encodeURIComponent(env.ARCHIVE_BRANCH)}`);
+    const headSha = ref.object.sha;
+    const commits = await listAllCommits(env);
+    const plan = planSquash(commits);
+    if (plan.skip) return { skipped: plan.reason };
+    const headCommit = await ghApi(env, 'GET', `/git/commits/${headSha}`);
+    const squashed = await ghApi(env, 'POST', '/git/commits', {
+      message: `squash: ${plan.count} commits (daily)`,
+      tree: headCommit.tree.sha,
+      parents: [plan.baseSha],
+    });
+    // 寫入前再確認 head 沒變（沒有新的上傳）
+    const again = await ghApi(env, 'GET', `/git/ref/heads/${encodeURIComponent(env.ARCHIVE_BRANCH)}`);
+    if (!headStillValid(headSha, again.object.sha)) return { skipped: 'head moved' };
+    await ghApi(env, 'PATCH', `/git/refs/heads/${encodeURIComponent(env.ARCHIVE_BRANCH)}`, { sha: squashed.sha, force: true });
+    await updateFile(env, 'squash-log.json', (old) => {
+      const log = old ? JSON.parse(old) : [];
+      log.push({ at: now, count: plan.count, base: plan.baseSha, previousHead: headSha, newHead: squashed.sha });
+      return JSON.stringify(log.slice(-60), null, 2);
+    }, 'archive: squash log');
+    return { squashed: plan.count, newHead: squashed.sha };
+  } finally {
+    await env.KV.delete('squash-lock');
+  }
 }
 
 // ---- WebRTC：ICE 設定（含 TURN 短效憑證）與 KV 信箱（信令備援）
@@ -254,11 +325,15 @@ export default {
       if (req.method === 'POST' && url.pathname === '/signal') return await handleSignal(env, req, code);
       if (req.method === 'POST' && url.pathname === '/signal/poll') return await handlePoll(env, code);
       if (req.method === 'POST' && url.pathname === '/append') return await handleAppend(env, req, code);
-      if (req.method === 'POST' && url.pathname === '/attachment') return await handleAttachment(env, req);
-      if (req.method === 'GET' && url.pathname === '/manifest') return await handleManifest(env, url);
+      if (req.method === 'POST' && url.pathname === '/attachment') return await handleAttachment(env, req, code);
+      if (req.method === 'GET' && url.pathname === '/manifest') return await handleManifest(env, url, code);
       return json({ error: '找不到端點' }, 404);
     } catch (e) {
       return json({ error: String(e && e.message ? e.message : e) }, 502);
     }
+  },
+  // Cron：每天一次（建議 0 19 * * *，即 UTC+8 凌晨 03:00 的安靜時段）做每日壓縮。
+  async scheduled(_event, env, ctx) {
+    ctx.waitUntil(squashArchive(env).catch(() => {}));
   },
 };
