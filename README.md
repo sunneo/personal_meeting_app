@@ -41,7 +41,9 @@ npm test
 ## 部署前要做的事（由使用者執行）
 
 1. **Supabase**：在共用專案的 SQL Editor 執行 `supabase/pma.sql`。
-2. **前端設定**：在 `js/config.js` 填入 `SUPABASE_URL` 與 `SUPABASE_PUBLISHABLE_KEY`（與 desktop-app 相同的值，可從 desktop-app 的設定讀取）。不要把真實金鑰 commit 進 repo。
+2. **備援專案**：`js/config.js` 的 `SUPABASE_PROJECTS` 目前列了四個專案（主要、備援、備援2、備援3，與 desktop-app 的 fa-worker 相同）。**每一個專案都必須在 SQL Editor 執行一次 `supabase/pma.sql`**，否則該專案回 404，程式會換下一個並在狀態列提示。各專案的資料互相獨立；長期歸檔以 Cloudflare 歸檔為準。publishable 金鑰設計上可公開。
+   - 備援順序：先試記住的專案（localStorage）；超時 8 秒、網路錯誤、5xx 或 404 就換下一個；每 10 分鐘回頭試主要。
+   - 全部失敗時訊息仍留在 IndexedDB，並標示「⏳待補傳」，啟動時、每分鐘與網路恢復時會自動補傳。
 3. **Cloudflare 長期路徑 B**：依 `cloudflare/archive-worker/README.md` 部署 Worker，設定 secrets `GH_TOKEN` 與 `ARCHIVE_KEY`。
 4. **GitHub Pages**：repo 設定中啟用 `main` 分支的 Pages。
 

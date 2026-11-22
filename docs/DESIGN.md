@@ -67,6 +67,18 @@
 - 附件可放 Supabase Storage（bucket 名 `pma-attachments`）；超過免費上限的檔案走路徑 B。
 - 還沒確認的事（需要查官方文件，不憑記憶）：免費方案的 Storage 單檔上限與總量、閒置暫停規則。
 
+### 5.1 多專案備援（已實作）
+
+- 專案清單在 `js/config.js` 的 `SUPABASE_PROJECTS`，順序：主要 → 備援 → 備援2 → 備援3（取自 desktop-app 的 fa-worker）。
+- **每一個備援專案都必須執行 `supabase/pma.sql`**。缺表或缺函式時 PostgREST 回 404，該專案視為不可用，程式改用下一個並在狀態列提示。
+- 各專案資料互相獨立（不同的資料庫），不做同步；長期歸檔以 Cloudflare 路徑 B（`cloudflare/archive-worker`）為準。
+- 選擇規則（`js/core/failover.js`，有單元測試）：
+  - 每次先試記住的專案（localStorage `pma.supabase.state`）。
+  - 單次請求逾時 8 秒；網路錯誤、5xx、404 都視為失敗，換下一個（循環）。
+  - 記住的專案不是主要，且距上次試主要超過 10 分鐘，就先試主要一次。
+  - 成功後記住該專案。
+- 全部失敗時：訊息仍在 IndexedDB，標示 `pendingSync`（畫面顯示「⏳待補傳」）；啟動時、每分鐘與 `online` 事件時補傳。
+
 ## 6. 長期儲存路徑 B：Cloudflare Worker → 私有 repo
 
 ### 6.1 Worker
