@@ -32,6 +32,22 @@
         </label>
         <label>版面寬度（px） <input name="width" type="number" min="480" max="1200" step="10"></label>
         <label>頭像 <input name="avatar" type="file" accept="image/*"></label>
+        <label>通知
+          <select name="notifyMode">
+            <option value="web">網頁通知</option>
+            <option value="off">關閉</option>
+          </select>
+        </label>
+        <label>音效
+          <select name="notifySound">
+            <option value="ding">叮</option>
+            <option value="chime">風鈴</option>
+            <option value="none">靜音</option>
+          </select>
+        </label>
+        <label>自訂音效（≤1MB 音訊） <input name="customSound" type="file" accept="audio/*"></label>
+        <button type="button" id="btn-notify-test">測試通知</button>
+        <p id="notify-msg" class="acct-msg"></p>
       </form>
     </details>
     <details id="account" class="account">
