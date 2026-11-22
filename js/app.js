@@ -1,6 +1,7 @@
 // 入口：本地模式。之後的功能（傳輸、長期儲存）依 docs/HANDOFF.md 的 todo 逐步加入。
 import { requestPersistence, saveMessage, loadMessages, deleteMessage, clearMessages } from './store.js';
 import { summarizeUsage, formatBytes } from './core/storage-usage.js';
+import { loadStickers, stickerUrl, importStickerFile, exportStickerYaml } from './stickers.js';
 import { putMessage } from './supabase-store.js';
 import { initSettings } from './settings.js';
 import {
@@ -158,6 +159,13 @@ function render() {
     del.textContent = '🗑';
     del.addEventListener('click', () => removeLocal(m));
     b.append(text, speak, del);
+    if (m.sticker) {
+      const img = document.createElement('img');
+      img.className = 'sticker-img';
+      img.alt = m.sticker.name;
+      img.src = stickerUrl(m.sticker); // <img> 不會執行 svg 內的腳本
+      b.append(img);
+    }
     for (const att of m.attachments || []) b.append(attachmentNode(att));
     if (m.subtitle !== undefined) {
       const sub = document.createElement('div');
@@ -194,6 +202,53 @@ async function refreshStorage() {
   } catch (_) { /* 不支援就略過 */ }
   storageInfo.textContent = `${est}本機 ${s.count} 則訊息，文字 ${formatBytes(s.textBytes)}，附件 ${formatBytes(s.attachmentBytes)}（${cats}）。`;
 }
+// ---- 貼圖：選擇器、送出貼圖訊息、匯入／匯出 YAML
+const stickerPicker = document.getElementById('sticker-picker');
+function renderPicker() {
+  stickerPicker.replaceChildren();
+  const list = loadStickers();
+  if (list.length === 0) {
+    const p = document.createElement('p');
+    p.className = 'acct-msg';
+    p.textContent = '貼圖庫是空的，請先到設定匯入 YAML。';
+    stickerPicker.append(p);
+    return;
+  }
+  for (const s of list) {
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.title = s.name;
+    const img = document.createElement('img');
+    img.src = stickerUrl(s);
+    img.alt = s.name;
+    btn.append(img);
+    btn.addEventListener('click', () => {
+      stickerPicker.hidden = true;
+      pushMessage({ id: crypto.randomUUID(), ts: Date.now(), me: true, body: `[貼圖] ${s.name}`, sticker: { name: s.name, type: s.type, data: s.data } });
+    });
+    stickerPicker.append(btn);
+  }
+}
+document.getElementById('btn-stickers').addEventListener('click', () => {
+  stickerPicker.hidden = !stickerPicker.hidden;
+  if (!stickerPicker.hidden) renderPicker();
+});
+document.getElementById('sticker-import').addEventListener('change', async (e) => {
+  const f = e.target.files[0];
+  e.target.value = '';
+  if (!f) return;
+  const r = await importStickerFile(f, 'merge');
+  document.getElementById('sticker-msg').textContent = r.message;
+});
+document.getElementById('btn-sticker-export').addEventListener('click', () => {
+  const blob = new Blob([exportStickerYaml()], { type: 'text/yaml;charset=utf-8' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = 'stickers.yaml';
+  a.click();
+  setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+});
+
 document.getElementById('btn-clear-local').addEventListener('click', async () => {
   if (!confirm('清除這台裝置上的所有訊息？已歸檔的內容不會被刪除。')) return;
   messages.length = 0;

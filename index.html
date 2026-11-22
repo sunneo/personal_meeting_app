@@ -49,6 +49,13 @@
         <button type="button" id="btn-notify-test">測試通知</button>
         <p id="notify-msg" class="acct-msg"></p>
         <div class="storage">
+          <h3>貼圖庫</h3>
+          <label>匯入貼圖（YAML） <input id="sticker-import" type="file" accept=".yaml,.yml,text/yaml,text/plain"></label>
+          <button type="button" id="btn-sticker-export">匯出貼圖（YAML）</button>
+          <p id="sticker-msg" class="acct-msg"></p>
+          <p class="acct-msg">格式見 docs/DESIGN.md 第 12 節。svg 會檢查安全性（不可含腳本或事件屬性）。</p>
+        </div>
+        <div class="storage">
           <h3>儲存空間</h3>
           <p id="storage-info" class="acct-msg"></p>
           <button type="button" id="btn-clear-local">清除本機所有訊息</button>
@@ -73,8 +80,10 @@
       <button type="button" id="btn-toggle-reg">沒有帳號？註冊</button>
       <p id="acct-msg" class="acct-msg"></p>
     </details>
+    <div id="sticker-picker" class="sticker-picker" hidden></div>
     <form id="composer" class="composer" autocomplete="off">
       <button type="button" id="btn-voice" title="錄製語音">🎤</button>
+      <button type="button" id="btn-stickers" title="貼圖">🙂</button>
       <label class="attach" title="傳送檔案">
         📎
         <input type="file" id="file-input" multiple hidden>

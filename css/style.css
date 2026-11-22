@@ -102,6 +102,13 @@ body {
 .prefs-form { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 6px; }
 .prefs-form label { display: flex; flex-direction: column; gap: 4px; font-size: 14px; }
 .prefs-form input, .prefs-form select { padding: 6px 8px; border: 1px solid var(--border); border-radius: 6px; background: var(--bubble-other); color: var(--fg); }
+.sticker-picker { display: flex; flex-wrap: wrap; gap: 6px; padding: 6px; border: 1px solid var(--border); border-radius: 8px; margin-top: 8px; max-height: 180px; overflow-y: auto; }
+.sticker-picker button { border: none; background: none; cursor: pointer; padding: 2px; }
+.sticker-picker img, .sticker-img { width: 64px; height: 64px; object-fit: contain; }
+.sticker-img { width: 120px; height: 120px; display: block; margin-top: 6px; }
+.storage { margin-top: 10px; display: flex; flex-direction: column; gap: 6px; }
+.storage h3 { margin: 0; font-size: 15px; }
+.storage button { align-self: flex-start; padding: 6px 10px; border-radius: 6px; border: 1px solid var(--border); background: var(--bubble-other); color: var(--fg); cursor: pointer; }
 .account { margin: 8px 0; font-size: 14px; }
 .account form { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 6px; }
 .account input { padding: 6px 8px; border: 1px solid var(--border); border-radius: 6px; background: var(--bubble-other); color: var(--fg); min-width: 0; flex: 1 1 140px; }
