@@ -89,6 +89,7 @@ window.addEventListener('pma:supabase-hint', (e) => {
 function categoryOf(file) {
   const t = file.type || '';
   if (t.startsWith('audio/')) return 'audio';
+  if (t.startsWith('video/')) return 'video';
   if (t === 'application/pdf' || /\.pdf$/i.test(file.name)) return 'pdf';
   return 'other';
 }
@@ -103,6 +104,15 @@ function attachmentNode(att) {
     a.controls = true;
     a.src = url;
     wrap.append(a);
+  } else if (att.category === 'video') {
+    // 不自動播放：preload=none、沒有 autoplay；點一下才播放，controls 內含全螢幕按鈕
+    const v = document.createElement('video');
+    v.controls = true;
+    v.preload = 'none';
+    v.playsInline = true;
+    v.src = url;
+    v.className = 'chat-video';
+    wrap.append(v);
   } else if (att.category === 'pdf') {
     const frame = document.createElement('iframe');
     frame.src = url;

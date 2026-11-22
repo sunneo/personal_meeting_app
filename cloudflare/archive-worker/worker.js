@@ -14,7 +14,7 @@ import {
 
 const MAX_PART_BYTES = 20 * 1024 * 1024;
 const TZ_OFFSET_MS = 8 * 60 * 60 * 1000; // 月份以 UTC+8 切分（見 docs/DESIGN.md）
-const CATEGORIES = new Set(['audio', 'music', 'pdf', 'docs', 'voice', 'other']);
+const CATEGORIES = new Set(['audio', 'music', 'video', 'pdf', 'docs', 'voice', 'other']);
 const CORS = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
