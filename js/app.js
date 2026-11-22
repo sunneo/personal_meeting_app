@@ -1,5 +1,6 @@
 // 入口：本地模式。之後的功能（傳輸、長期儲存）依 docs/HANDOFF.md 的 todo 逐步加入。
-import { requestPersistence, saveMessage, loadMessages } from './store.js';
+import { requestPersistence, saveMessage, loadMessages, deleteMessage, clearMessages } from './store.js';
+import { summarizeUsage, formatBytes } from './core/storage-usage.js';
 import { putMessage } from './supabase-store.js';
 import { initSettings } from './settings.js';
 import {
@@ -150,7 +151,13 @@ function render() {
     speak.title = '朗讀';
     speak.textContent = '🔊';
     speak.addEventListener('click', () => speakText(m.body));
-    b.append(text, speak);
+    const del = document.createElement('button');
+    del.type = 'button';
+    del.className = 'speak';
+    del.title = '刪除本機這則訊息';
+    del.textContent = '🗑';
+    del.addEventListener('click', () => removeLocal(m));
+    b.append(text, speak, del);
     for (const att of m.attachments || []) b.append(attachmentNode(att));
     if (m.subtitle !== undefined) {
       const sub = document.createElement('div');
@@ -161,7 +168,38 @@ function render() {
     conv.append(b);
   }
   conv.scrollTop = conv.scrollHeight;
+  refreshStorage();
 }
+
+/** 刪除本機一則訊息（已歸檔的不會刪）。 */
+async function removeLocal(m) {
+  if (!confirm('刪除這台裝置上的這則訊息？已歸檔的內容不會被刪除。')) return;
+  const i = messages.indexOf(m);
+  if (i >= 0) messages.splice(i, 1);
+  await deleteMessage(m.id);
+  render();
+}
+
+// ---- 儲存空間：顯示瀏覽器估計用量與本機訊息佔用；可清除本機資料
+const storageInfo = document.getElementById('storage-info');
+async function refreshStorage() {
+  const s = summarizeUsage(messages);
+  const cats = Object.entries(s.byCategory).map(([k, v]) => `${k} ${v.count} 個（${formatBytes(v.bytes)}）`).join('、') || '無附件';
+  let est = '';
+  try {
+    if (navigator.storage && navigator.storage.estimate) {
+      const e = await navigator.storage.estimate();
+      est = `瀏覽器用量 ${formatBytes(e.usage || 0)} / 配額 ${formatBytes(e.quota || 0)}。`;
+    }
+  } catch (_) { /* 不支援就略過 */ }
+  storageInfo.textContent = `${est}本機 ${s.count} 則訊息，文字 ${formatBytes(s.textBytes)}，附件 ${formatBytes(s.attachmentBytes)}（${cats}）。`;
+}
+document.getElementById('btn-clear-local').addEventListener('click', async () => {
+  if (!confirm('清除這台裝置上的所有訊息？已歸檔的內容不會被刪除。')) return;
+  messages.length = 0;
+  await clearMessages();
+  render();
+});
 
 form.addEventListener('submit', (e) => {
   e.preventDefault();

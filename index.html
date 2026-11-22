@@ -48,6 +48,12 @@
         <label>自訂音效（≤1MB 音訊） <input name="customSound" type="file" accept="audio/*"></label>
         <button type="button" id="btn-notify-test">測試通知</button>
         <p id="notify-msg" class="acct-msg"></p>
+        <div class="storage">
+          <h3>儲存空間</h3>
+          <p id="storage-info" class="acct-msg"></p>
+          <button type="button" id="btn-clear-local">清除本機所有訊息</button>
+          <p class="acct-msg">只刪除這台裝置上的資料；已歸檔到 Cloudflare / Supabase 的內容不會被刪除。</p>
+        </div>
       </form>
     </details>
     <details id="account" class="account">

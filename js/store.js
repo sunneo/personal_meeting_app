@@ -52,6 +52,40 @@ export async function saveMessage(msg) {
   }
 }
 
+/** 刪除本機的一則訊息（不影響已歸檔的資料）。 */
+export async function deleteMessage(id) {
+  try {
+    const db = await openDb();
+    await new Promise((resolve, reject) => {
+      const tx = db.transaction(STORE, 'readwrite');
+      tx.objectStore(STORE).delete(id);
+      tx.oncomplete = () => resolve();
+      tx.onerror = () => reject(tx.error);
+      tx.onabort = () => reject(tx.error);
+    });
+    return true;
+  } catch (_) {
+    return false;
+  }
+}
+
+/** 清空本機所有訊息（不影響已歸檔的資料）。 */
+export async function clearMessages() {
+  try {
+    const db = await openDb();
+    await new Promise((resolve, reject) => {
+      const tx = db.transaction(STORE, 'readwrite');
+      tx.objectStore(STORE).clear();
+      tx.oncomplete = () => resolve();
+      tx.onerror = () => reject(tx.error);
+      tx.onabort = () => reject(tx.error);
+    });
+    return true;
+  } catch (_) {
+    return false;
+  }
+}
+
 /** 讀出全部訊息，依時間排序。失敗時回傳空陣列。 */
 export async function loadMessages() {
   try {
