@@ -2,6 +2,7 @@
 import { requestPersistence, saveMessage, loadMessages } from './store.js';
 import { putMessage } from './supabase-store.js';
 
+
 const conv = document.getElementById('conversation');
 const form = document.getElementById('composer');
 const input = document.getElementById('text-input');
@@ -12,10 +13,39 @@ const messages = [];
 /** 新增一則訊息：先放進記憶體顯示，再寫入 IndexedDB。 */
 function pushMessage(msg) {
   messages.push(msg);
+  msg.pendingSync = true; // 長期 A 尚未確認寫入；成功後才清掉
   saveMessage(msg);
-  putMessage(msg); // 長期路徑 A（未設定 Supabase 時自動略過）
   render();
+  syncOne(msg);
 }
+
+/** 嘗試把單則訊息寫入 Supabase（備援全失敗就保留 pendingSync，不丟失）。 */
+async function syncOne(msg) {
+  if (!msg.pendingSync) return;
+  const ok = await putMessage(msg);
+  if (ok) {
+    msg.pendingSync = false;
+    await saveMessage(msg);
+    render();
+  }
+}
+
+/** 補傳所有待補傳的訊息。 */
+async function flushPending() {
+  for (const m of messages) {
+    if (m.pendingSync) await syncOne(m);
+  }
+}
+
+// 啟動後與網路恢復時補傳；每分鐘也補傳一次
+window.addEventListener('online', flushPending);
+setInterval(flushPending, 60 * 1000);
+
+// Supabase 備援的提示（例如 404 代表該專案還沒執行 pma.sql）
+const statusEl = document.getElementById('status');
+window.addEventListener('pma:supabase-hint', (e) => {
+  statusEl.textContent = e.detail.message;
+});
 
 /** 依副檔名／MIME 分類：audio（聲音/音樂）、pdf、other（文件）。 */
 function categoryOf(file) {
@@ -75,6 +105,7 @@ function render() {
   for (const m of messages) {
     const b = document.createElement('div');
     b.className = 'bubble' + (m.me ? ' me' : '');
+    if (m.pendingSync) b.dataset.pending = '1';
     const text = document.createElement('span');
     text.textContent = m.body;
     const speak = document.createElement('button');
@@ -204,3 +235,4 @@ fileInput.addEventListener('change', () => {
 requestPersistence();
 messages.push(...(await loadMessages()));
 render();
+flushPending();

@@ -81,6 +81,7 @@ body {
   word-break: break-word;
 }
 .bubble.me { align-self: flex-end; background: var(--bubble-me); }
+.bubble[data-pending]::after { content: " ⏳待補傳"; font-size: 12px; color: var(--muted); }
 .bubble .speak { margin-left: 6px; cursor: pointer; background: none; border: none; font-size: 14px; }
 .bubble .subtitle { font-size: 13px; color: var(--muted); margin-top: 4px; }
 
