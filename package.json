@@ -4,6 +4,6 @@
   "description": "Static web messenger (GitHub Pages). No runtime dependencies; tests use node:test.",
   "type": "module",
   "scripts": {
-    "test": "node test/archive-format.test.mjs && node test/failover.test.mjs && node test/auth.test.mjs && node test/archive-client.test.mjs && node test/prefs.test.mjs && node test/notify.test.mjs && node test/storage-usage.test.mjs"
+    "test": "node test/archive-format.test.mjs && node test/failover.test.mjs && node test/auth.test.mjs && node test/archive-client.test.mjs && node test/prefs.test.mjs && node test/notify.test.mjs && node test/storage-usage.test.mjs && node test/sticker-yaml.test.mjs"
   }
 }
