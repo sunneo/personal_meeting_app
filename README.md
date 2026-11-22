@@ -19,12 +19,16 @@ index.html                       頁面
 css/style.css                    樣式（支援深色模式）
 js/app.js                        入口：聊天、檔案、語音
 js/store.js                      IndexedDB 短期儲存
+js/archive-client.js             路徑 B 前端：登入、JSONL、附件分片上傳
+js/settings.js / notify.js       偏好、頭像、通知與音效
+js/stickers.js / social.js       貼圖庫、好友與群組（本機）
 js/supabase-store.js             長期路徑 A（Supabase REST RPC）
 js/config.js                     設定（網址與公開金鑰留空，由部署者填）
 js/core/archive-format.js        純邏輯：月份、切片、JSONL（給前端與測試用）
 cloudflare/archive-worker/       長期路徑 B 的 Worker 與部署說明
 supabase/pma.sql                 Supabase 資料表與函式（使用者自己執行）
-test/                            純邏輯測試
+js/core/                         純邏輯：分片、JSONL、偏好、通知、貼圖 YAML、社交、分享代號、儲存統計
+test/                            純邏輯測試（npm test，共 9 組，不需安裝套件）
 docs/                            設計與交接文件
 ```
 
@@ -44,12 +48,17 @@ npm test
 2. **備援專案**：`js/config.js` 的 `SUPABASE_PROJECTS` 目前列了四個專案（主要、備援、備援2、備援3，與 desktop-app 的 fa-worker 相同）。**每一個專案都必須在 SQL Editor 執行一次 `supabase/pma.sql`**，否則該專案回 404，程式會換下一個並在狀態列提示。各專案的資料互相獨立；長期歸檔以 Cloudflare 歸檔為準。publishable 金鑰設計上可公開。
    - 備援順序：先試記住的專案（localStorage）；超時 8 秒、網路錯誤、5xx 或 404 就換下一個；每 10 分鐘回頭試主要。
    - 全部失敗時訊息仍留在 IndexedDB，並標示「⏳待補傳」，啟動時、每分鐘與網路恢復時會自動補傳。
-3. **Cloudflare 長期路徑 B**：依 `cloudflare/archive-worker/README.md` 部署 Worker，設定 secrets `GH_TOKEN` 與 `ARCHIVE_KEY`。
+3. **Cloudflare 長期路徑 B**：依 `cloudflare/archive-worker/README.md` 部署 Worker（`worker.js` + `auth.js`）。需要：KV binding `KV`；secrets `GH_TOKEN`、`SESSION_SECRET`（≥32 字元）、`INVITE_CODE`；變數 `ARCHIVE_REPO`、`ARCHIVE_BRANCH`。舊的 `ARCHIVE_KEY` 可以刪除。
 4. **GitHub Pages**：repo 設定中啟用 `main` 分支的 Pages。
 
-目前還沒做的：把附件寫入路徑 B 的 UI 流程（Worker 端點已備妥）、從 Supabase 拉回歷史訊息，以及 `js/config.js` 內的 Worker 網址串接。
+目前還沒做的（詳見 `docs/DESIGN.md` 第 13 節）：
+- 收到他人訊息的接收路徑（Supabase 或 Worker 讀取）；目前通知只能由測試按鈕觸發。
+- 好友、群組、偏好、貼圖的跨裝置同步（目前只存在本機）。
+- 手機推播（Web Push）與 QR Code。
+- 所有瀏覽器行為尚未在真瀏覽器實測。
 
 ## 安全
 
-- repo 內不放任何 token、私鑰或真實的 `ARCHIVE_KEY`。
+- repo 內不放任何 token、私鑰、密碼或邀請碼。`GH_TOKEN`、`SESSION_SECRET`、`INVITE_CODE` 只存在 Cloudflare Worker 的 secrets。
+- 前端只拿到 2 小時有效的登入 token，存在記憶體中（見 `docs/DESIGN.auth.md`）。
 - `GH_TOKEN` 只存在 Cloudflare Worker 的 secrets，權限限定在私有 repo 的 Contents 讀寫。
