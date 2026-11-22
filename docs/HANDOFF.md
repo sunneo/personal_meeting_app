@@ -16,6 +16,8 @@ A. Security design FIRST (write docs/DESIGN.auth.md, then implement): the user a
 B. Wire frontend to archive worker: append JSONL per message (/append), attachments (/attachment, 20MB parts), pending-queue retry, use session token.
 C. Features (user list, verbatim below): 1 register/login (code + password confirm); 2 avatar + preferences (font size, font family, width); 3 notifications (phone/web Notification API, pick sound, upload custom sound); 4 storage-space management (show usage by IndexedDB/persist estimate, clear/delete items); 5 friends list; 6 sticker library (default YAML format describing svg and gif animations; import/export); 7 chat videos do not autoplay, click to play, fullscreen allowed; 8 create chat groups; 9 share via share-code or QR code (generate QR client-side with a small cdnjs lib or own implementation).
 D. Tests for pure logic (auth token sign/verify, yaml sticker parsing, share code); update README/DESIGN; list deploy steps for user.
+E. (Phase 3, after A-D) WebRTC video chat (1-to-1 first, small group mesh optional): signaling via Supabase Realtime broadcast channels (primary; use the failover project list) with Cloudflare worker as fallback (KV polling like desktop-app fa-worker). ICE: public STUN; TURN credentials minted by the worker (Cloudflare Calls TURN or similar; keys stay in worker secrets, session-token protected, short TTL; if user has not configured TURN, fall back to STUN-only and say so). UI: call button in chat/group, camera/mic toggle, screen share optional, fullscreen. Pure logic (signaling message schema, state machine) gets tests. List the bindings/secrets the user must add.
+
 Rule: if a phase is too big, split into more commits; hand off at 70% context.
 
 ## 4. Working style
@@ -48,6 +50,8 @@ Rule: if a phase is too big, split into more commits; hand off at 70% context.
 > 9. 使用者可以用分享代號或QRCode的方式
 > 幫我加上備援專案自動切換 (done)
 > archive worker URL: https://personal-meeting.sunneo529.workers.dev (deployed by user; vars ARCHIVE_REPO=sunneo/personal_meeting_app_repo, ARCHIVE_BRANCH=archive; secrets GH_TOKEN, ARCHIVE_KEY set)  (2026-11-22)
+
+> 要利用supabase/cloudflare的能力來做到webrtc，做到視訊聊天  (2026-11-22)
 
 ## 6. Handoff procedure
 Run the low-context-long-run skill with THRESHOLD 70%. Successor: model haiku, effort high, initiation user_asked, context fresh, same cwd; title "personal_meeting_app worker · handoff N". Finish the todo list → report completion, don't hand off.
