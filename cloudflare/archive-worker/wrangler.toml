@@ -1,0 +1,13 @@
+# 只有裝得了 wrangler（Node 22、64 位元系統）時才用得到；否則用 Cloudflare 後台網頁部署（見 README.md）。
+name = "personal-meeting-archive"
+main = "worker.js"
+compatibility_date = "2025-01-01"
+
+# 私有 repo 與分支（repo 名稱不含 owner 以外的內容）
+[vars]
+ARCHIVE_REPO = "sunneo/personal_meeting_app_repo"
+ARCHIVE_BRANCH = "archive"
+
+# 秘密不寫在這裡。部署後用：
+#   wrangler secret put GH_TOKEN
+#   wrangler secret put ARCHIVE_KEY
