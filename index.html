@@ -48,6 +48,18 @@
         <label>自訂音效（≤1MB 音訊） <input name="customSound" type="file" accept="audio/*"></label>
         <button type="button" id="btn-notify-test">測試通知</button>
         <p id="notify-msg" class="acct-msg"></p>
+        <div id="social-panel" class="storage">
+          <h3>好友與群組（僅存在這台裝置）</h3>
+          <p class="acct-msg">我的分享代號（給朋友輸入或掃描）：</p>
+          <p id="my-share" class="acct-msg" style="word-break:break-all"></p>
+          <label>加好友（輸入代號或 PMA1 分享代號）<input id="friend-input" type="text"></label>
+          <button type="button" id="btn-add-friend">加入好友</button>
+          <ul id="friend-list"></ul>
+          <label>群組名稱 <input id="group-name" type="text" maxlength="40"></label>
+          <button type="button" id="btn-create-group">建立群組</button>
+          <ul id="group-list"></ul>
+          <p id="social-msg" class="acct-msg"></p>
+        </div>
         <div class="storage">
           <h3>貼圖庫</h3>
           <label>匯入貼圖（YAML） <input id="sticker-import" type="file" accept=".yaml,.yml,text/yaml,text/plain"></label>

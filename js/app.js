@@ -2,6 +2,7 @@
 import { requestPersistence, saveMessage, loadMessages, deleteMessage, clearMessages } from './store.js';
 import { summarizeUsage, formatBytes } from './core/storage-usage.js';
 import { loadStickers, stickerUrl, importStickerFile, exportStickerYaml } from './stickers.js';
+import { initSocial } from './social.js';
 import { putMessage } from './supabase-store.js';
 import { initSettings } from './settings.js';
 import {
@@ -430,6 +431,10 @@ registerForm.addEventListener('submit', async (e) => {
 
 setAcctStatus();
 initSettings();
+const social = initSocial(() => (isLoggedIn() ? currentCode : ''));
+// 登入狀態改變時刷新分享代號
+loginForm.addEventListener('submit', () => setTimeout(() => social.refresh(), 0));
+registerForm.addEventListener('submit', () => setTimeout(() => social.refresh(), 0));
 requestPersistence();
 messages.push(...(await loadMessages()));
 render();
