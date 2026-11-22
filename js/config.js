@@ -13,4 +13,4 @@ export const SUPABASE_URL = SUPABASE_PROJECTS[0].url;
 export const SUPABASE_PUBLISHABLE_KEY = SUPABASE_PROJECTS[0].key;
 
 // 長期路徑 B（Cloudflare Worker）的網址，之後才會用到。
-export const ARCHIVE_WORKER_URL = '';
+export const ARCHIVE_WORKER_URL = 'https://personal-meeting.sunneo529.workers.dev';
