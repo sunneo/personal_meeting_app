@@ -5,6 +5,7 @@ import { loadStickers, stickerUrl, importStickerFile, exportStickerYaml } from '
 import { initSocial } from './social.js';
 import { initCallUi } from './call-ui.js';
 import { initRecordingLibrary } from './recordings.js';
+import { buildBackupZip, restoreBackupZip, maybeUploadDailyBackup } from './backup.js';
 import { putMessage } from './supabase-store.js';
 import { initSettings } from './settings.js';
 import {
@@ -384,7 +385,39 @@ const btnToggleReg = document.getElementById('btn-toggle-reg');
 let currentCode = '';
 let callUi = null;
 let recLib = null;
-function onLoggedIn() { if (callUi) callUi.connect(currentCode); }
+function onLoggedIn() {
+  if (callUi) callUi.connect(currentCode);
+  maybeUploadDailyBackup(messages).catch(() => {});
+}
+
+// ---- 備份：匯出／還原
+const backupMsg = document.getElementById('backup-msg');
+document.getElementById('btn-backup-export').addEventListener('click', async () => {
+  const zip = await buildBackupZip(messages);
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(new Blob([zip], { type: 'application/zip' }));
+  a.download = `personal-meeting-backup-${new Date().toISOString().slice(0, 10)}.zip`;
+  a.click();
+  setTimeout(() => URL.revokeObjectURL(a.href), 2000);
+  backupMsg.textContent = `已匯出 ${messages.length} 則訊息。`;
+});
+document.getElementById('backup-restore').addEventListener('change', async (e) => {
+  const f = e.target.files[0];
+  e.target.value = '';
+  if (!f) return;
+  try {
+    const restored = await restoreBackupZip(new Uint8Array(await f.arrayBuffer()), saveMessage);
+    for (const m of restored) {
+      const i = messages.findIndex((x) => x.id === m.id);
+      if (i >= 0) messages[i] = m; else messages.push(m);
+    }
+    messages.sort((a, b) => a.ts - b.ts);
+    backupMsg.textContent = `已還原 ${restored.length} 則訊息（同編號的會被覆蓋，不會重複）。`;
+    render();
+  } catch (err) {
+    backupMsg.textContent = '還原失敗：' + (err && err.message ? err.message : err);
+  }
+});
 
 function setAcctStatus() {
   acctSummary.textContent = isLoggedIn() ? `已登入：${currentCode}（歸檔已啟用）` : '未登入（長期歸檔需要登入）';

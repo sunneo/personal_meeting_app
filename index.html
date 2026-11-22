@@ -60,6 +60,13 @@
           <ul id="group-list"></ul>
           <p id="social-msg" class="acct-msg"></p>
         </div>
+        <div id="backup-panel" class="storage">
+          <h3>聊天紀錄備份</h3>
+          <p class="acct-msg">匯出為 zip（訊息 JSONL＋附件）。登入後每天會自動把備份上傳到你的帳號歸檔。</p>
+          <button type="button" id="btn-backup-export">匯出備份（zip）</button>
+          <label>從備份還原 <input id="backup-restore" type="file" accept=".zip,application/zip"></label>
+          <p id="backup-msg" class="acct-msg"></p>
+        </div>
         <div id="recordings-panel" class="storage">
           <h3>錄音錄影庫（只屬於你，不在對話中）</h3>
           <p class="acct-msg">預設存在這台裝置的 IndexedDB。支援的瀏覽器可以另外選一個資料夾（File System Access）。</p>
